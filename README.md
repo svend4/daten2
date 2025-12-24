@@ -1,28 +1,29 @@
-# Уровень 7 — Enterprise: микросервисы (Docker + nginx gateway + Postgres + RabbitMQ)
+# Уровень 6 — Next.js (App Router) + TypeScript + PostgreSQL + Prisma + Tailwind
 
-Структура (по описанию в чате 14.12.2025):
+Этот проект **собран по коду из чата за 14.12.2025** (без учёта изменений 17.12).
 
-```
-flower_shop_enterprise/
-├── frontend/                    # React приложение (Vite)
-├── api-gateway/                 # nginx конфиг (reverse proxy)
-├── services/
-│   ├── product-service/         # Микросервис товаров (Node.js)
-│   ├── order-service/           # Микросервис заказов (Python)
-│   └── notification-service/    # Уведомления (consumer очереди)
-├── db/
-│   └── init.sql                 # Инициализация Postgres + seed
-└── docker-compose.yml
-```
+## Структура (как в чате)
+- `prisma/schema.prisma`, `prisma/seed.ts`
+- `src/app/*` (App Router)
+- `src/app/api/*` (API routes)
+- `src/components/*`, `src/lib/*`, `src/types/*`, `src/store/*`
 
-## Запуск
-Нужен Docker Desktop или Docker Engine.
+> Примечание: в дереве структуры в чате упоминалась папка `src/services/`, но отдельных блоков кода для `productService.ts` и `orderService.ts` в сообщениях 14.12 не было — папка оставлена как часть структуры.
 
+## Быстрый запуск
+1) Поднимите PostgreSQL и задайте `DATABASE_URL` в `.env`
+2) Установите зависимости:
 ```bash
-docker compose up --build
+npm install
 ```
-
-- Витрина через gateway: http://localhost:8080  
-- RabbitMQ UI: http://localhost:15672 (логин и пароль: guest, guest)
-
-При создании заказа order-service публикует событие `order.created` в очередь `events`, notification-service выводит его в лог.
+3) Prisma:
+```bash
+npx prisma generate
+npx prisma migrate dev
+npx prisma db seed
+```
+4) Запуск:
+```bash
+npm run dev
+```
+Открыть: http://localhost:3000

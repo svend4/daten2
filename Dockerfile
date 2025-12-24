@@ -1,7 +1,47 @@
-FROM node:20-alpine
+# Dockerfile for Next.js + Prisma + Tailwind
+FROM node:20-alpine AS base
+
+# Install dependencies only when needed
+FROM base AS deps
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
-COPY frontend/package.json frontend/package-lock.json* ./
-RUN npm install
-COPY frontend/ .
+
+COPY package.json package-lock.json* ./
+COPY prisma ./prisma/
+
+RUN npm ci
+
+# Rebuild the source code only when needed
+FROM base AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+# Generate Prisma Client
+RUN npx prisma generate
+
+# Build Next.js
+RUN npm run build
+
+# Production image
+FROM base AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV PORT=10000
+
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/prisma ./prisma
+
+USER nextjs
+
 EXPOSE 10000
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "10000"]
+
+ENV HOSTNAME="0.0.0.0"
+
+CMD ["node", "server.js"]
