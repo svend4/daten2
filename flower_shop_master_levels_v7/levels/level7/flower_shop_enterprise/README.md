@@ -16,13 +16,13 @@ flower_shop_enterprise/
 ```
 
 ## Запуск
-Нужен Docker Desktop / Docker Engine.
+Нужен Docker Desktop или Docker Engine.
 
 ```bash
 docker compose up --build
 ```
 
 - Витрина через gateway: http://localhost:8080  
-- RabbitMQ UI: http://localhost:15672 (логин/пароль: guest/guest)
+- RabbitMQ UI: http://localhost:15672 (логин и пароль: guest, guest)
 
 При создании заказа order-service публикует событие `order.created` в очередь `events`, notification-service выводит его в лог.

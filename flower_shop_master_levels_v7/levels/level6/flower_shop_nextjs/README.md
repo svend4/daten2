@@ -8,7 +8,7 @@
 - `src/app/api/*` (API routes)
 - `src/components/*`, `src/lib/*`, `src/types/*`, `src/store/*`
 
-> Примечание: в дереве структуры в чате упоминалась папка `src/services/`, но отдельных блоков кода для `productService.ts` / `orderService.ts` в сообщениях 14.12 не было — папка оставлена как часть структуры.
+> Примечание: в дереве структуры в чате упоминалась папка `src/services/`, но отдельных блоков кода для `productService.ts` и `orderService.ts` в сообщениях 14.12 не было — папка оставлена как часть структуры.
 
 ## Быстрый запуск
 1) Поднимите PostgreSQL и задайте `DATABASE_URL` в `.env`
