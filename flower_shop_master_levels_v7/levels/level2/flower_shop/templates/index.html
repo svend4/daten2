@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Магазин цветов</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="wrap">
+    <h1>🌹 Магазин цветов</h1>
+    <p class="muted">Уровень 2: Flask + SQLite + шаблоны.</p>
+
+    <div class="grid">
+      {% for p in products %}
+        <div class="card">
+          <img src="{{ url_for('static', filename=(p['image'] or 'images/rose.jpg')) }}" alt="flower">
+          <h3>{{ p['name'] }}</h3>
+          <p>{{ p['description'] }}</p>
+          <div class="price">{{ "%.2f"|format(p['price']) }} €</div>
+
+          <form method="POST" action="{{ url_for('order') }}">
+            <input type="hidden" name="product_id" value="{{ p['id'] }}">
+            <input name="name" placeholder="Ваше имя" required>
+            <input name="phone" placeholder="Телефон (необязательно)">
+            <button type="submit">Заказать</button>
+          </form>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</body>
+</html>
