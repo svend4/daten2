@@ -1,76 +1,26 @@
 # docker-compose.yml
+# Flower Shop Enterprise - Microservices Architecture
 version: '3.8'
 
 services:
   # =============================================
-  # DATABASES
+  # DATABASE
   # =============================================
-  
-  # PostgreSQL для Product Service
-  product-db:
+
+  postgres:
     image: postgres:15-alpine
-    container_name: product-db
+    container_name: flower-db
     environment:
-      POSTGRES_DB: products_db
+      POSTGRES_DB: flower_shop
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     volumes:
-      - product-db-data:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - microservices-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # PostgreSQL для Order Service
-  order-db:
-    image: postgres:15-alpine
-    container_name: order-db
-    environment:
-      POSTGRES_DB: orders_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    volumes:
-      - order-db-data:/var/lib/postgresql/data
-    networks:
-      - microservices-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # PostgreSQL для User Service
-  user-db:
-    image: postgres:15-alpine
-    container_name: user-db
-    environment:
-      POSTGRES_DB: users_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    volumes:
-      - user-db-data:/var/lib/postgresql/data
-    networks:
-      - microservices-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # Redis для кеширования и сессий
-  redis:
-    image: redis:7-alpine
-    container_name: redis
-    command: redis-server --appendonly yes
-    volumes:
-      - redis-data:/data
-    networks:
-      - microservices-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -78,16 +28,16 @@ services:
   # =============================================
   # MESSAGE QUEUE
   # =============================================
-  
+
   rabbitmq:
     image: rabbitmq:3-management-alpine
     container_name: rabbitmq
     environment:
-      RABBITMQ_DEFAULT_USER: admin
-      RABBITMQ_DEFAULT_PASS: admin
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
     ports:
-      - "5672:5672"    # AMQP
-      - "15672:15672"  # Management UI
+      - "5672:5672"
+      - "15672:15672"
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
     networks:
@@ -102,34 +52,7 @@ services:
   # MICROSERVICES
   # =============================================
 
-  # API Gateway
-  gateway:
-    build:
-      context: ./gateway
-      dockerfile: Dockerfile
-    container_name: gateway
-    ports:
-      - "3000:3000"
-    environment:
-      NODE_ENV: development
-      PORT: 3000
-      REDIS_URL: redis://redis:6379
-      PRODUCT_SERVICE_URL: http://product-service:3001
-      ORDER_SERVICE_URL: http://order-service:8000
-      USER_SERVICE_URL: http://user-service:3002
-      JWT_SECRET: your-jwt-secret-change-in-production
-    depends_on:
-      - redis
-      - product-service
-      - order-service
-      - user-service
-    networks:
-      - microservices-network
-    volumes:
-      - ./gateway/src:/app/src
-    command: npm run dev
-
-  # Product Service
+  # Product Service (Node.js)
   product-service:
     build:
       context: ./services/product-service
@@ -138,23 +61,14 @@ services:
     environment:
       NODE_ENV: development
       PORT: 3001
-      DATABASE_URL: postgresql://postgres:postgres@product-db:5432/products_db
-      REDIS_URL: redis://redis:6379
-      RABBITMQ_URL: amqp://admin:admin@rabbitmq:5672
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/flower_shop
     depends_on:
-      product-db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      rabbitmq:
+      postgres:
         condition: service_healthy
     networks:
       - microservices-network
-    volumes:
-      - ./services/product-service/src:/app/src
-    command: npm run dev
 
-  # Order Service
+  # Order Service (Python)
   order-service:
     build:
       context: ./services/order-service
@@ -163,48 +77,17 @@ services:
     environment:
       PYTHONUNBUFFERED: 1
       PORT: 8000
-      DATABASE_URL: postgresql://postgres:postgres@order-db:5432/orders_db
-      REDIS_URL: redis://redis:6379
-      RABBITMQ_URL: amqp://admin:admin@rabbitmq:5672
-      PRODUCT_SERVICE_URL: http://product-service:3001
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/flower_shop
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
     depends_on:
-      order-db:
-        condition: service_healthy
-      redis:
+      postgres:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
     networks:
       - microservices-network
-    volumes:
-      - ./services/order-service/app:/app/app
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
-  # User Service
-  user-service:
-    build:
-      context: ./services/user-service
-      dockerfile: Dockerfile
-    container_name: user-service
-    environment:
-      NODE_ENV: development
-      PORT: 3002
-      DATABASE_URL: postgresql://postgres:postgres@user-db:5432/users_db
-      REDIS_URL: redis://redis:6379
-      JWT_SECRET: your-jwt-secret-change-in-production
-      JWT_EXPIRES_IN: 7d
-    depends_on:
-      user-db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - microservices-network
-    volumes:
-      - ./services/user-service/src:/app/src
-    command: npm run dev
-
-  # Notification Service
+  # Notification Service (Python - RabbitMQ consumer)
   notification-service:
     build:
       context: ./services/notification-service
@@ -212,19 +95,12 @@ services:
     container_name: notification-service
     environment:
       PYTHONUNBUFFERED: 1
-      RABBITMQ_URL: amqp://admin:admin@rabbitmq:5672
-      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_USER: ${SMTP_USER}
-      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
     depends_on:
       rabbitmq:
         condition: service_healthy
     networks:
       - microservices-network
-    volumes:
-      - ./services/notification-service/app:/app/app
-    command: python -m app.main
 
   # =============================================
   # FRONTEND
@@ -236,68 +112,25 @@ services:
       dockerfile: Dockerfile
     container_name: frontend
     ports:
-      - "3001:3000"
-    environment:
-      REACT_APP_API_URL: http://localhost:3000/api
-    volumes:
-      - ./frontend/src:/app/src
-      - /app/node_modules
-    command: npm start
+      - "5173:5173"
+    networks:
+      - microservices-network
 
   # =============================================
-  # NGINX (Load Balancer & Reverse Proxy)
+  # API GATEWAY (nginx)
   # =============================================
 
   nginx:
-    build:
-      context: ./nginx
-      dockerfile: Dockerfile
-    container_name: nginx
+    image: nginx:alpine
+    container_name: nginx-gateway
     ports:
-      - "80:80"
-      - "443:443"
+      - "8080:80"
+    volumes:
+      - ./api-gateway/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
-      - gateway
+      - product-service
+      - order-service
       - frontend
-    networks:
-      - microservices-network
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
-
-  # =============================================
-  # MONITORING
-  # =============================================
-
-  # Prometheus
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: prometheus
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-      - prometheus-data:/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-    networks:
-      - microservices-network
-
-  # Grafana
-  grafana:
-    image: grafana/grafana:latest
-    container_name: grafana
-    ports:
-      - "3030:3000"
-    environment:
-      GF_SECURITY_ADMIN_PASSWORD: admin
-      GF_USERS_ALLOW_SIGN_UP: false
-    volumes:
-      - grafana-data:/var/lib/grafana
-      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
-    depends_on:
-      - prometheus
     networks:
       - microservices-network
 
@@ -314,10 +147,5 @@ networks:
 # =============================================
 
 volumes:
-  product-db-data:
-  order-db-data:
-  user-db-data:
-  redis-data:
+  postgres-data:
   rabbitmq-data:
-  prometheus-data:
-  grafana-data:
