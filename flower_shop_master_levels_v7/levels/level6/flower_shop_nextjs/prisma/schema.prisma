@@ -1,0 +1,105 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Категория
+model Category {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique
+  description String?
+  slug        String    @unique
+  createdAt   DateTime  @default(now()) @map("created_at")
+  
+  products    Product[]
+  
+  @@map("categories")
+}
+
+// Товар
+model Product {
+  id          Int       @id @default(autoincrement())
+  name        String
+  slug        String    @unique
+  description String?
+  price       Decimal   @db.Decimal(10, 2)
+  categoryId  Int       @map("category_id")
+  image       String?
+  stock       Int       @default(0)
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  
+  category    Category  @relation(fields: [categoryId], references: [id])
+  orderItems  OrderItem[]
+  
+  @@index([slug])
+  @@index([categoryId])
+  @@index([isActive])
+  @@map("products")
+}
+
+// Клиент
+model Customer {
+  id        Int       @id @default(autoincrement())
+  name      String
+  phone     String
+  email     String?
+  address   String
+  createdAt DateTime  @default(now()) @map("created_at")
+  
+  orders    Order[]
+  
+  @@map("customers")
+}
+
+// Заказ
+model Order {
+  id              Int       @id @default(autoincrement())
+  customerId      Int       @map("customer_id")
+  totalAmount     Decimal   @db.Decimal(10, 2) @map("total_amount")
+  status          OrderStatus @default(NEW)
+  deliveryAddress String    @map("delivery_address")
+  notes           String?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  
+  customer        Customer  @relation(fields: [customerId], references: [id])
+  items           OrderItem[]
+  
+  @@index([customerId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("orders")
+}
+
+// Статус заказа
+enum OrderStatus {
+  NEW
+  CONFIRMED
+  PREPARING
+  DELIVERING
+  COMPLETED
+  CANCELLED
+}
+
+// Товар в заказе
+model OrderItem {
+  id        Int      @id @default(autoincrement())
+  orderId   Int      @map("order_id")
+  productId Int      @map("product_id")
+  quantity  Int
+  price     Decimal  @db.Decimal(10, 2)
+  
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id])
+  
+  @@index([orderId])
+  @@map("order_items")
+}
