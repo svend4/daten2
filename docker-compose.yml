@@ -1,12 +1,9 @@
 # docker-compose.yml
-# Flower Shop Enterprise - Microservices Architecture
+# Flower Shop Enterprise - Microservices
 version: '3.8'
 
 services:
-  # =============================================
   # DATABASE
-  # =============================================
-
   postgres:
     image: postgres:15-alpine
     container_name: flower-db
@@ -17,18 +14,17 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
     networks:
-      - microservices-network
+      - app-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # =============================================
   # MESSAGE QUEUE
-  # =============================================
-
   rabbitmq:
     image: rabbitmq:3-management-alpine
     container_name: rabbitmq
@@ -38,44 +34,31 @@ services:
     ports:
       - "5672:5672"
       - "15672:15672"
-    volumes:
-      - rabbitmq-data:/var/lib/rabbitmq
     networks:
-      - microservices-network
+      - app-network
     healthcheck:
       test: rabbitmq-diagnostics -q ping
       interval: 30s
       timeout: 10s
       retries: 5
 
-  # =============================================
   # MICROSERVICES
-  # =============================================
-
-  # Product Service (Node.js)
   product-service:
-    build:
-      context: ./services/product-service
-      dockerfile: Dockerfile
+    build: ./services/product-service
     container_name: product-service
     environment:
-      NODE_ENV: development
       PORT: 3001
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/flower_shop
     depends_on:
       postgres:
         condition: service_healthy
     networks:
-      - microservices-network
+      - app-network
 
-  # Order Service (Python)
   order-service:
-    build:
-      context: ./services/order-service
-      dockerfile: Dockerfile
+    build: ./services/order-service
     container_name: order-service
     environment:
-      PYTHONUNBUFFERED: 1
       PORT: 8000
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/flower_shop
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
@@ -85,41 +68,29 @@ services:
       rabbitmq:
         condition: service_healthy
     networks:
-      - microservices-network
+      - app-network
 
-  # Notification Service (Python - RabbitMQ consumer)
   notification-service:
-    build:
-      context: ./services/notification-service
-      dockerfile: Dockerfile
+    build: ./services/notification-service
     container_name: notification-service
     environment:
-      PYTHONUNBUFFERED: 1
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
     depends_on:
       rabbitmq:
         condition: service_healthy
     networks:
-      - microservices-network
+      - app-network
 
-  # =============================================
   # FRONTEND
-  # =============================================
-
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
+    build: ./frontend
     container_name: frontend
     ports:
       - "5173:5173"
     networks:
-      - microservices-network
+      - app-network
 
-  # =============================================
-  # API GATEWAY (nginx)
-  # =============================================
-
+  # API GATEWAY
   nginx:
     image: nginx:alpine
     container_name: nginx-gateway
@@ -132,20 +103,11 @@ services:
       - order-service
       - frontend
     networks:
-      - microservices-network
-
-# =============================================
-# NETWORKS
-# =============================================
+      - app-network
 
 networks:
-  microservices-network:
+  app-network:
     driver: bridge
-
-# =============================================
-# VOLUMES
-# =============================================
 
 volumes:
   postgres-data:
-  rabbitmq-data:
