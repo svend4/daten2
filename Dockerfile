@@ -1,23 +1,18 @@
-# Dockerfile for PHP + SQLite Flower Shop
-FROM php:8.2-apache
+# Dockerfile for Flask + SQLite Flower Shop
+FROM python:3.12-slim
 
-# Install SQLite extension
-RUN docker-php-ext-install pdo pdo_sqlite
+WORKDIR /app
 
-# Enable Apache mod_rewrite
-RUN a2enmod rewrite
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt gunicorn
 
-# Set working directory
-WORKDIR /var/www/html
-
-# Copy application files
+# Copy application
 COPY . .
 
-# Set permissions for SQLite database
-RUN chmod 666 flowers.db && \
-    chown -R www-data:www-data /var/www/html
+# Set permissions for SQLite
+RUN chmod 666 flowers.db
 
-# Expose port
-EXPOSE 80
+EXPOSE 10000
 
-CMD ["apache2-foreground"]
+CMD ["gunicorn", "--bind", "0.0.0.0:10000", "app:app"]

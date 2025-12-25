@@ -1,28 +1,35 @@
-# Уровень 1 — PHP + SQLite (всё в одном файле)
+# Уровень 2 — Flask + SQLite + шаблоны
 
 Структура (как в чате 14.12.2025):
 
 ```
 flower_shop/
-├── index.php          # Весь сайт
-├── flowers.db         # База данных (SQLite, уже заполнена)
-└── images/            # Фото цветов (заглушки)
-    ├── rose.jpg
-    ├── tulip.jpg
-    └── peony.jpg
+├── app.py                 # Backend
+├── flowers.db             # База данных (SQLite, уже заполнена)
+├── templates/             # HTML шаблоны
+│   └── index.html
+├── static/                # CSS, JS, изображения
+│   ├── style.css
+│   └── images/
+│       ├── rose.jpg
+│       ├── tulip.jpg
+│       └── peony.jpg
 ```
 
-## Запуск (самый простой)
-1) Установите PHP (или XAMPP).
-2) Откройте терминал в папке `flower_shop/`
-3) Запустите встроенный сервер:
-
+## Запуск
 ```bash
-php -S localhost:8000
+python -m venv .venv
+# Windows: .venv\Scripts\activate
+# Linux или Mac: source .venv/bin/activate
+
+pip install flask
+python app.py
 ```
 
-4) Откройте в браузере: `http://localhost:8000`
+Открыть: http://127.0.0.1:5000
 
 
-## Примечание (проверка по чату 14.12)
-Добавлены `init_db.php` и дополнительные имена изображений (дубликаты) для совпадения со структурой из чата.
+## Установка
+```bash
+pip install -r requirements.txt
+```
