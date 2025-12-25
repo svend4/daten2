@@ -7,3 +7,9 @@ body { font-family: Arial, sans-serif; margin: 0; background: #fafafa; }
 input, button { width: 100%; padding: 10px; margin-top: 8px; border-radius: 10px; border: 1px solid #ddd; }
 button { cursor: pointer; }
 .muted { color: #777; }
+
+.cart{margin-top:24px;background:#fff;border:1px solid #e5e5e5;border-radius:12px;padding:12px}
+.row{display:flex;gap:10px;align-items:center;margin:8px 0}
+.grow{flex:1}
+.total{font-weight:bold}
+button{background:#fff}
