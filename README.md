@@ -1,19 +1,22 @@
-# Уровень 2 — Flask + SQLite + шаблоны
+# Уровень 3 — Django + админка
 
 Структура (как в чате 14.12.2025):
 
 ```
 flower_shop/
-├── app.py                 # Backend
-├── flowers.db             # База данных (SQLite, уже заполнена)
-├── templates/             # HTML шаблоны
+├── manage.py
+├── flower_shop/           # Настройки проекта
+│   ├── settings.py
+│   ├── urls.py
+│   └── wsgi.py
+├── shop/                  # Приложение магазина
+│   ├── models.py          # Модели БД
+│   ├── views.py
+│   └── admin.py           # Админка
+├── templates/
 │   └── index.html
-├── static/                # CSS, JS, изображения
-│   ├── style.css
-│   └── images/
-│       ├── rose.jpg
-│       ├── tulip.jpg
-│       └── peony.jpg
+└── static/
+    └── style.css
 ```
 
 ## Запуск
@@ -22,14 +25,12 @@ python -m venv .venv
 # Windows: .venv\Scripts\activate
 # Linux или Mac: source .venv/bin/activate
 
-pip install flask
-python app.py
-```
-
-Открыть: http://127.0.0.1:5000
-
-
-## Установка
-```bash
 pip install -r requirements.txt
+python manage.py migrate
+python manage.py createsuperuser
+python manage.py runserver
 ```
+
+- Сайт: http://127.0.0.1:8000  
+- Админка: http://127.0.0.1:8000/admin/  
+Добавьте категории и товары в админке — они появятся на главной.
