@@ -1,47 +1,23 @@
-# Dockerfile for Next.js + Prisma + Tailwind
-FROM node:20-alpine AS base
+# Dockerfile for PHP + SQLite Flower Shop
+FROM php:8.2-apache
 
-# Install dependencies only when needed
-FROM base AS deps
-RUN apk add --no-cache libc6-compat
-WORKDIR /app
+# Install SQLite extension
+RUN docker-php-ext-install pdo pdo_sqlite
 
-COPY package.json package-lock.json* ./
-COPY prisma ./prisma/
+# Enable Apache mod_rewrite
+RUN a2enmod rewrite
 
-RUN npm ci
+# Set working directory
+WORKDIR /var/www/html
 
-# Rebuild the source code only when needed
-FROM base AS builder
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
+# Copy application files
 COPY . .
 
-# Generate Prisma Client
-RUN npx prisma generate
+# Set permissions for SQLite database
+RUN chmod 666 flowers.db && \
+    chown -R www-data:www-data /var/www/html
 
-# Build Next.js
-RUN npm run build
+# Expose port
+EXPOSE 80
 
-# Production image
-FROM base AS runner
-WORKDIR /app
-
-ENV NODE_ENV=production
-ENV PORT=10000
-
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
-
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/prisma ./prisma
-
-USER nextjs
-
-EXPOSE 10000
-
-ENV HOSTNAME="0.0.0.0"
-
-CMD ["node", "server.js"]
+CMD ["apache2-foreground"]

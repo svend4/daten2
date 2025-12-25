@@ -1,29 +1,28 @@
-# Уровень 6 — Next.js (App Router) + TypeScript + PostgreSQL + Prisma + Tailwind
+# Уровень 1 — PHP + SQLite (всё в одном файле)
 
-Этот проект **собран по коду из чата за 14.12.2025** (без учёта изменений 17.12).
+Структура (как в чате 14.12.2025):
 
-## Структура (как в чате)
-- `prisma/schema.prisma`, `prisma/seed.ts`
-- `src/app/*` (App Router)
-- `src/app/api/*` (API routes)
-- `src/components/*`, `src/lib/*`, `src/types/*`, `src/store/*`
-
-> Примечание: в дереве структуры в чате упоминалась папка `src/services/`, но отдельных блоков кода для `productService.ts` и `orderService.ts` в сообщениях 14.12 не было — папка оставлена как часть структуры.
-
-## Быстрый запуск
-1) Поднимите PostgreSQL и задайте `DATABASE_URL` в `.env`
-2) Установите зависимости:
-```bash
-npm install
 ```
-3) Prisma:
-```bash
-npx prisma generate
-npx prisma migrate dev
-npx prisma db seed
+flower_shop/
+├── index.php          # Весь сайт
+├── flowers.db         # База данных (SQLite, уже заполнена)
+└── images/            # Фото цветов (заглушки)
+    ├── rose.jpg
+    ├── tulip.jpg
+    └── peony.jpg
 ```
-4) Запуск:
+
+## Запуск (самый простой)
+1) Установите PHP (или XAMPP).
+2) Откройте терминал в папке `flower_shop/`
+3) Запустите встроенный сервер:
+
 ```bash
-npm run dev
+php -S localhost:8000
 ```
-Открыть: http://localhost:3000
+
+4) Откройте в браузере: `http://localhost:8000`
+
+
+## Примечание (проверка по чату 14.12)
+Добавлены `init_db.php` и дополнительные имена изображений (дубликаты) для совпадения со структурой из чата.
