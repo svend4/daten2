@@ -371,8 +371,8 @@ if (isset($_GET['search']) && !empty($_GET['search'])) {
             <div class="product-card">
                 <span class="category-badge"><?= htmlspecialchars($product['category_name']) ?></span>
                 
-                <?php if (file_exists($product['photo_path'])): ?>
-                    <img src="<?= htmlspecialchars($product['photo_path']) ?>" alt="<?= htmlspecialchars($product['name']) ?>">
+                <?php if (!empty($product['image']) && file_exists($product['image'])): ?>
+                    <img src="<?= htmlspecialchars($product['image']) ?>" alt="<?= htmlspecialchars($product['name']) ?>">
                 <?php else: ?>
                     <img src="https://via.placeholder.com/280x220/ffc0cb/d63384?text=<?= urlencode($product['name']) ?>" alt="<?= htmlspecialchars($product['name']) ?>">
                 <?php endif; ?>

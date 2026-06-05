@@ -18,8 +18,8 @@ $db->exec('
         name TEXT NOT NULL,
         description TEXT,
         price REAL NOT NULL,
+        image TEXT,
         category_id INTEGER,
-        photo_path TEXT,
         stock INTEGER DEFAULT 0,
         is_active INTEGER DEFAULT 1
     )
@@ -65,7 +65,7 @@ $db->exec("INSERT INTO categories (name) VALUES ('Букеты')");
 
 // Добавить товары
 $db->exec("
-    INSERT INTO products (name, description, price, category_id, photo_path, stock) VALUES
+    INSERT INTO products (name, description, price, category_id, image, stock) VALUES
     ('Красная роза', 'Классическая красная роза премиум класса', 150.00, 1, 'images/rose-red.jpg', 50),
     ('Белая роза', 'Нежная белая роза', 140.00, 1, 'images/rose-white.jpg', 30),
     ('Желтый тюльпан', 'Яркий желтый тюльпан', 80.00, 2, 'images/tulip-yellow.jpg', 100),
