@@ -3,25 +3,22 @@
 const nextConfig = {
   output: 'standalone',
   images: {
-    domains: ['via.placeholder.com'],
+    // Разрешаем только доверенные хосты вместо открытого '**'
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: '**',
+        hostname: 'images.unsplash.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'res.cloudinary.com',
       },
     ],
   },
-  // Оптимизация для production
   reactStrictMode: true,
   swcMinify: true,
-  // Compress
   compress: true,
-  // Настройки для production
   poweredByHeader: false,
-  // Experimental features
-  experimental: {
-    optimizeCss: true,
-  },
 };
 
 module.exports = nextConfig;

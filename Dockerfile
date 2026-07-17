@@ -38,10 +38,18 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
 
+# Prisma CLI + движки для провижна схемы при старте (db push)
+COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
+COPY --from=builder /app/node_modules/@prisma/engines ./node_modules/@prisma/engines
+COPY --from=builder /app/node_modules/.bin/prisma ./node_modules/.bin/prisma
+
+COPY docker-entrypoint.sh ./
+RUN chmod +x docker-entrypoint.sh && chown -R nextjs:nodejs /app
+
 USER nextjs
 
 EXPOSE 10000
 
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["node", "server.js"]
+CMD ["./docker-entrypoint.sh"]

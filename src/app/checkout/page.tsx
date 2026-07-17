@@ -104,8 +104,8 @@ export default function CheckoutPage() {
         // Очистить корзину
         clearCart();
 
-        // Перейти на страницу успеха
-        router.push(`/orders/${data.data.id}`);
+        // Перейти на страницу успеха по непубличному токену заказа
+        router.push(`/orders/${data.data.token}`);
       } else {
         setApiError(
           Array.isArray(data.errors)

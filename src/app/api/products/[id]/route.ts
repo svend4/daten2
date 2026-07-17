@@ -25,7 +25,7 @@ export async function GET(
       );
     }
 
-    const product = await prisma.product.findUnique({
+    const product = await prisma.product.findFirst({
       where: {
         id,
         isActive: true,

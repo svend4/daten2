@@ -1,4 +1,7 @@
 {
+  "name": "flower-shop-nextjs",
+  "version": "1.0.0",
+  "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
@@ -12,5 +15,29 @@
     "db:migrate": "prisma migrate dev",
     "db:reset": "prisma migrate reset",
     "postinstall": "prisma generate"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.18.0",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.427.0",
+    "next": "^14.2.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwind-merge": "^2.5.2",
+    "zod": "^3.23.8",
+    "zustand": "^4.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.14",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "autoprefixer": "^10.4.19",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "^14.2.5",
+    "postcss": "^8.4.40",
+    "prisma": "^5.18.0",
+    "tailwindcss": "^3.4.7",
+    "tsx": "^4.16.5",
+    "typescript": "^5.5.4"
   }
 }

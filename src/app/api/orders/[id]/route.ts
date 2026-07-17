@@ -13,20 +13,22 @@ export async function GET(
   { params }: RouteParams
 ) {
   try {
-    const id = parseInt(params.id);
+    // Поиск по непубличному токену, а не по последовательному ID —
+    // исключает перебор чужих заказов (IDOR).
+    const token = params.id;
 
-    if (isNaN(id)) {
+    if (!token || token.length < 8) {
       return NextResponse.json(
         {
           success: false,
-          error: 'Неверный ID заказа',
+          error: 'Неверный идентификатор заказа',
         },
         { status: 400 }
       );
     }
 
     const order = await prisma.order.findUnique({
-      where: { id },
+      where: { token },
       include: {
         customer: true,
         items: {

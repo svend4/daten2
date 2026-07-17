@@ -62,6 +62,7 @@ model Customer {
 // Заказ
 model Order {
   id              Int       @id @default(autoincrement())
+  token           String    @unique @default(uuid())
   customerId      Int       @map("customer_id")
   totalAmount     Decimal   @db.Decimal(10, 2) @map("total_amount")
   status          OrderStatus @default(NEW)
