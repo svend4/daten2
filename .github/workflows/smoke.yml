@@ -44,3 +44,39 @@ jobs:
           grep -q "PORT: 3001" docker-compose.local.yml
           grep -q "PORT: 8000" docker-compose.local.yml
           echo "Порты gateway↔сервисы согласованы ✓"
+
+  db:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: flower_shop
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Load canonical schema (db/init.sql)
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -d flower_shop -v ON_ERROR_STOP=1 -f db/init.sql
+      - name: Verify rich order flow on Postgres
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d flower_shop -v ON_ERROR_STOP=1 <<'SQL'
+          INSERT INTO customers (name, phone) VALUES ('CI','0') RETURNING id \gset c_
+          INSERT INTO orders (order_number, customer_id, subtotal, total_amount, delivery_address)
+            VALUES ('citoken00000000000000000000000000', :c_id, 1.50, 1.50, 'x') RETURNING id \gset o_
+          INSERT INTO order_items (order_id, product_id, product_name, quantity, unit_price, line_total)
+            VALUES (:o_id, 1, 'Красная роза', 1, 1.50, 1.50);
+          INSERT INTO order_status_history (order_id, status, note) VALUES (:o_id, 'new', 'Заказ создан');
+          SQL
+          echo "init.sql + богатый поток заказа OK ✓"

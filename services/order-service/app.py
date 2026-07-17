@@ -1,4 +1,4 @@
-import os, json, time
+import os, json, time, uuid
 from flask import Flask, request, jsonify
 import psycopg
 import pika
@@ -31,29 +31,66 @@ def create_order():
     data = request.get_json(force=True, silent=True) or {}
     name = (data.get("name") or "").strip()
     phone = (data.get("phone") or "").strip()
+    email = (data.get("email") or "").strip()
+    address = (data.get("address") or "").strip()
     items = data.get("items") or []
 
     if not name or not items:
         return jsonify({"error": "name/items required"}), 400
 
+    order_number = uuid.uuid4().hex
     with psycopg.connect(DB_DSN) as conn:
         with conn.cursor() as cur:
-            cur.execute("INSERT INTO orders (customer_name, phone) VALUES (%s, %s) RETURNING id", (name, phone))
-            order_id = cur.fetchone()[0]
-
+            # Позиции с серверными ценами и снимком названия
+            priced = []
+            subtotal = 0.0
             for it in items:
                 pid = int(it.get("product_id") or 0)
-                qty = int(it.get("qty") or 1)
-                cur.execute("SELECT price FROM products WHERE id=%s", (pid,))
+                qty = int(it.get("quantity") or it.get("qty") or 1)
+                if qty < 1:
+                    continue
+                cur.execute("SELECT name, price FROM products WHERE id=%s", (pid,))
                 row = cur.fetchone()
-                price = float(row[0]) if row else 0.0
-                cur.execute(
-                    "INSERT INTO order_items (order_id, product_id, qty, price) VALUES (%s, %s, %s, %s)",
-                    (order_id, pid, qty, price),
-                )
+                if not row:
+                    continue
+                pname, price = row[0], float(row[1])
+                line_total = price * qty
+                subtotal += line_total
+                priced.append((pid, pname, qty, price, line_total))
 
-    publish("order.created", {"order_id": order_id, "customer_name": name})
-    return jsonify({"order_id": order_id})
+            if not priced:
+                return jsonify({"error": "no valid items"}), 400
+
+            cur.execute(
+                "INSERT INTO customers (name, phone, email, address) VALUES (%s, %s, %s, %s) RETURNING id",
+                (name, phone, email, address),
+            )
+            customer_id = cur.fetchone()[0]
+
+            cur.execute(
+                """INSERT INTO orders
+                   (order_number, customer_id, subtotal, total_amount, delivery_address, status, payment_status)
+                   VALUES (%s, %s, %s, %s, %s, 'new', 'pending') RETURNING id""",
+                (order_number, customer_id, subtotal, subtotal, address),
+            )
+            order_id = cur.fetchone()[0]
+
+            for pid, pname, qty, price, line_total in priced:
+                cur.execute(
+                    """INSERT INTO order_items
+                       (order_id, product_id, product_name, quantity, unit_price, line_total)
+                       VALUES (%s, %s, %s, %s, %s, %s)""",
+                    (order_id, pid, pname, qty, price, line_total),
+                )
+                cur.execute("UPDATE products SET stock = stock - %s WHERE id=%s", (qty, pid))
+
+            cur.execute(
+                "INSERT INTO order_status_history (order_id, status, note) VALUES (%s, 'new', 'Заказ создан')",
+                (order_id,),
+            )
+
+    publish("order.created", {"order_number": order_number, "customer_name": name})
+    return jsonify({"order_number": order_number, "total": subtotal}), 201
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "7002")))

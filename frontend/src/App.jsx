@@ -8,7 +8,7 @@ export default function App() {
     fetch('/api/products').then(r => r.json()).then(setProducts);
   }, []);
 
-  const add = (p) => setCart(prev => [...prev, { product_id: p.id, name: p.name, qty: 1 }]);
+  const add = (p) => setCart(prev => [...prev, { product_id: p.id, name: p.name, quantity: 1 }]);
 
   const order = async () => {
     const name = prompt('Ваше имя?') || '';
@@ -16,7 +16,7 @@ export default function App() {
     const r = await fetch('/api/orders', { method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ name, items: cart }) });
     const data = await r.json();
-    alert('✅ Заказ принят! № ' + data.order_id);
+    alert('✅ Заказ принят! Номер для отслеживания: ' + data.order_number);
     setCart([]);
   };
 

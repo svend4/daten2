@@ -8,7 +8,13 @@ app.get('/health', (_, res) => res.json({ ok: true }));
 
 app.get('/api/products', async (_, res) => {
   try {
-    const r = await pool.query('SELECT id, name, description, price, image, stock FROM products WHERE is_active = true ORDER BY id DESC');
+    const r = await pool.query(
+      `SELECT p.id, p.name, p.slug, p.description, p.price, p.currency, p.sku,
+              p.image, p.stock, p.is_featured, c.name AS category_name
+       FROM products p LEFT JOIN categories c ON c.id = p.category_id
+       WHERE p.is_active = true
+       ORDER BY p.is_featured DESC, p.name`
+    );
     res.json(r.rows);
   } catch (e) {
     res.status(500).json({ error: 'db_error', detail: String(e) });
