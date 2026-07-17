@@ -37,18 +37,50 @@ app.get('/product/:id', (req, res) => {
 });
 
 app.post('/order', (req, res) => {
-    const { name, phone, product_id, quantity } = req.body;
+    const { name, phone, product_id } = req.body;
+    const quantity = Math.max(1, parseInt(req.body.quantity, 10) || 1);
 
-    db.run(
-        'INSERT INTO orders (customer_name, phone, product_id, quantity) VALUES (?, ?, ?, ?)',
-        [name, phone, product_id, quantity || 1],
-        function(err) {
-            if (err) {
-                return res.status(500).send('Order error');
-            }
-            res.render('order', { orderId: this.lastID, name });
+    if (!name || !product_id) {
+        return res.status(400).send('Name and product are required');
+    }
+
+    // Серверный поиск цены и проверка остатка
+    db.get('SELECT price, stock FROM products WHERE id = ?', [product_id], (err, product) => {
+        if (err || !product) {
+            return res.status(404).send('Product not found');
         }
-    );
+        if (product.stock < quantity) {
+            return res.status(400).send('Not enough stock');
+        }
+
+        db.serialize(() => {
+            db.run('BEGIN');
+            db.run(
+                'INSERT INTO orders (customer_name, phone, status) VALUES (?, ?, ?)',
+                [name, phone, 'new'],
+                function (orderErr) {
+                    if (orderErr) {
+                        db.run('ROLLBACK');
+                        return res.status(500).send('Order error');
+                    }
+                    const orderId = this.lastID;
+                    db.run(
+                        'INSERT INTO order_items (order_id, product_id, qty, price) VALUES (?, ?, ?, ?)',
+                        [orderId, product_id, quantity, product.price],
+                        (itemErr) => {
+                            if (itemErr) {
+                                db.run('ROLLBACK');
+                                return res.status(500).send('Order error');
+                            }
+                            db.run('UPDATE products SET stock = stock - ? WHERE id = ?', [quantity, product_id]);
+                            db.run('COMMIT');
+                            res.render('order', { orderId, name });
+                        }
+                    );
+                }
+            );
+        });
+    });
 });
 
 // API endpoints
