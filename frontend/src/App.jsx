@@ -28,9 +28,9 @@ export default function App() {
 
   const order = async () => {
     if (!name || cart.length === 0) return;
-    const payload = { name, phone, items: cart.map(x => ({ product_id: x.product_id, qty: x.qty })) };
+    const payload = { name, phone, items: cart.map(x => ({ product_id: x.product_id, quantity: x.qty })) };
     const res = await axios.post(`${API}/api/orders`, payload);
-    alert(`✅ Заказ принят! № ${res.data.order_id}`);
+    alert(`✅ Заказ принят! Номер для отслеживания: ${res.data.order_number}`);
     setCart([]);
     setName('');
     setPhone('');

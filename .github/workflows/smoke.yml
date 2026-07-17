@@ -14,16 +14,23 @@ jobs:
           python-version: '3.12'
       - name: Install backend deps
         run: pip install -r backend/requirements.txt
-      - name: Boot API and check endpoints
+      - name: Boot API and check endpoints (rich schema)
         working-directory: backend
         run: |
           python - <<'PY'
-          import api
+          import api  # инициализирует БД из канонической схемы при импорте
           api.app.config['TESTING'] = True
           c = api.app.test_client()
           r = c.get('/api/products')
           assert r.status_code == 200 and isinstance(r.get_json(), list), 'каталог API'
-          print('API /api/products OK ✓')
+          r = c.post('/api/orders', json={'name': 'CI', 'phone': '0', 'email': 'a@b.c',
+                                          'address': 'x', 'items': [{'product_id': 1, 'quantity': 1}]})
+          assert r.status_code == 201, 'создание заказа'
+          token = r.get_json()['order_number']
+          assert len(token) == 32, 'токен заказа'
+          r2 = c.get(f'/api/orders/{token}')
+          assert r2.status_code == 200 and r2.get_json()['order']['payment_status'] == 'pending', 'заказ по токену'
+          print('API + богатая схема OK ✓')
           PY
 
   frontend:
