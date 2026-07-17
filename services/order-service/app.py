@@ -6,7 +6,7 @@ import pika
 app = Flask(__name__)
 
 DB_DSN = os.environ["DATABASE_URL"]
-AMQP_URL = os.environ.get("AMQP_URL", "amqp://guest:guest@rabbitmq:5672/")
+AMQP_URL = os.environ.get("RABBITMQ_URL") or os.environ.get("AMQP_URL", "amqp://guest:guest@rabbitmq:5672/")
 
 def publish(event: str, payload: dict):
     params = pika.URLParameters(AMQP_URL)

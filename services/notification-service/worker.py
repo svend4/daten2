@@ -1,7 +1,7 @@
 import os, json, time
 import pika
 
-AMQP_URL = os.environ.get("AMQP_URL", "amqp://guest:guest@rabbitmq:5672/")
+AMQP_URL = os.environ.get("RABBITMQ_URL") or os.environ.get("AMQP_URL", "amqp://guest:guest@rabbitmq:5672/")
 
 def main():
     params = pika.URLParameters(AMQP_URL)
