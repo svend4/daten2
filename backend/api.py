@@ -4,7 +4,12 @@ import sqlite3
 import os
 
 app = Flask(__name__, static_folder='static', static_url_path='')
-CORS(app)
+
+# CORS ограничен явными origin'ами (по умолчанию только тот же origin).
+# Список через запятую в CORS_ORIGINS; в single-service деплое фронт и API — один origin.
+_cors_origins = [o.strip() for o in os.environ.get('CORS_ORIGINS', '').split(',') if o.strip()]
+if _cors_origins:
+    CORS(app, resources={r"/api/*": {"origins": _cors_origins}})
 
 def get_db():
     conn = sqlite3.connect('flowers.db')
@@ -56,4 +61,5 @@ def create_order():
     return jsonify({'order_id': order_id})
 
 if __name__ == '__main__':
-    app.run(port=5001, debug=True)
+    debug = os.environ.get('FLASK_DEBUG', 'false').lower() in ('1', 'true', 'yes')
+    app.run(port=int(os.environ.get('PORT', 5001)), debug=debug)
