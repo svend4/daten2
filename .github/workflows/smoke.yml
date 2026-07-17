@@ -21,14 +21,17 @@ jobs:
         run: |
           node --check server.js
           node --check app.js
+          node --check init_db.js
 
-      - name: Boot server and check catalog + order
+      - name: Boot server and check catalog + rich order flow
         run: |
           PORT=3000 node server.js >/tmp/node.log 2>&1 &
-          sleep 3
+          sleep 4
           curl -fsS http://127.0.0.1:3000/ | grep -qi "цвет"
           echo "Каталог отдаётся ✓"
-          code=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+          # PRG: POST -> 302 на /order/<order_number> (непубличный токен)
+          LOC=$(curl -s -o /dev/null -w "%{redirect_url}" -X POST \
             -d "name=CI&phone=0&product_id=1&quantity=1" http://127.0.0.1:3000/order)
-          test "$code" = "200"
-          echo "Заказ оформляется ✓"
+          echo "$LOC" | grep -qE "/order/[0-9a-f]{32}"
+          curl -fsS "$LOC" | grep -q "принят"
+          echo "Богатый поток заказа OK ✓"

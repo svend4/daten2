@@ -7,8 +7,19 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>✅ Заказ принят</h1>
-  <p>Номер заказа: <b>#<%= order_id %></b></p>
+  <h1>✅ Заказ #<%= order.id %> принят</h1>
+  <p>Спасибо, <%= order.customer_name %>!<% if (order.phone) { %> Мы свяжемся с вами по телефону <%= order.phone %>.<% } %></p>
+  <p class="muted">Номер для отслеживания: <code><%= order.order_number %></code></p>
+
+  <h3>Состав заказа</h3>
+  <ul>
+    <% items.forEach(i => { %>
+      <li><%= i.product_name %> × <%= i.quantity %> — <%= Number(i.line_total).toFixed(2) %> €</li>
+    <% }) %>
+  </ul>
+  <p class="price">Итого: <%= Number(order.total_amount).toFixed(2) %> €
+    <span class="muted">(оплата: <%= order.payment_status %>)</span></p>
+
   <a href="/">На главную</a>
 </div>
 </body>

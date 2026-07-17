@@ -1,12 +1,15 @@
 // server.js
-const app = require('./app');
+const { initDb } = require('./init_db');
 
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
 
-// Запуск сервера
-app.listen(PORT, HOST, () => {
-    console.log(`
+// Сначала гарантируем схему и сид (идемпотентно), затем стартуем
+initDb()
+    .then(() => {
+        const app = require('./app');
+        app.listen(PORT, HOST, () => {
+            console.log(`
 ╔════════════════════════════════════════╗
 ║   🌹 Магазин цветов - Node.js + Express   ║
 ╚════════════════════════════════════════╝
@@ -19,7 +22,12 @@ app.listen(PORT, HOST, () => {
 
 Нажмите Ctrl+C для остановки
     `);
-});
+        });
+    })
+    .catch((err) => {
+        console.error('❌ Не удалось инициализировать БД:', err);
+        process.exit(1);
+    });
 
 // Обработка сигналов завершения
 process.on('SIGINT', () => {
