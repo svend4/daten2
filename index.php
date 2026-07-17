@@ -24,52 +24,44 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
     $result = $stmt->execute();
     $product = $result->fetchArray(SQLITE3_ASSOC);
     
-    if ($product && $product['stock'] >= $quantity) {
+    if ($product && $quantity > 0 && $product['stock'] >= $quantity) {
         $total = $product['price'] * $quantity;
-        
+
         // Начать транзакцию
         $db->exec('BEGIN');
-        
+
         try {
-            // Создать клиента
-            $stmt = $db->prepare('INSERT INTO customers (name, phone, email, address) VALUES (?, ?, ?, ?)');
+            // Создать заказ (схема БД: orders хранит имя и телефон напрямую)
+            $stmt = $db->prepare('INSERT INTO orders (customer_name, phone, status) VALUES (?, ?, "new")');
             $stmt->bindValue(1, $name, SQLITE3_TEXT);
             $stmt->bindValue(2, $phone, SQLITE3_TEXT);
-            $stmt->bindValue(3, $email, SQLITE3_TEXT);
-            $stmt->bindValue(4, $address, SQLITE3_TEXT);
-            $stmt->execute();
-            $customer_id = $db->lastInsertRowID();
-            
-            // Создать заказ
-            $stmt = $db->prepare('INSERT INTO orders (customer_id, total_amount, status) VALUES (?, ?, "new")');
-            $stmt->bindValue(1, $customer_id, SQLITE3_INTEGER);
-            $stmt->bindValue(2, $total, SQLITE3_FLOAT);
             $stmt->execute();
             $order_id = $db->lastInsertRowID();
-            
-            // Добавить товар в заказ
-            $stmt = $db->prepare('INSERT INTO order_items (order_id, product_id, quantity, price) VALUES (?, ?, ?, ?)');
+
+            // Добавить товар в заказ (колонка qty согласно схеме)
+            $stmt = $db->prepare('INSERT INTO order_items (order_id, product_id, qty, price) VALUES (?, ?, ?, ?)');
             $stmt->bindValue(1, $order_id, SQLITE3_INTEGER);
             $stmt->bindValue(2, $product_id, SQLITE3_INTEGER);
             $stmt->bindValue(3, $quantity, SQLITE3_INTEGER);
             $stmt->bindValue(4, $product['price'], SQLITE3_FLOAT);
             $stmt->execute();
-            
+
             // Уменьшить остаток на складе
             $stmt = $db->prepare('UPDATE products SET stock = stock - ? WHERE id = ?');
             $stmt->bindValue(1, $quantity, SQLITE3_INTEGER);
             $stmt->bindValue(2, $product_id, SQLITE3_INTEGER);
             $stmt->execute();
-            
+
             $db->exec('COMMIT');
-            
-            $success_message = "✅ Заказ #$order_id успешно оформлен! Сумма: $total руб. Мы свяжемся с вами по телефону $phone";
-            
+
+            $success_message = "✅ Заказ #$order_id успешно оформлен! Сумма: $total руб. Мы свяжемся с вами по телефону " . htmlspecialchars($phone);
+
         } catch (Exception $e) {
             $db->exec('ROLLBACK');
-            $error_message = "❌ Ошибка при создании заказа: " . $e->getMessage();
+            error_log('Order creation failed: ' . $e->getMessage());
+            $error_message = "❌ Не удалось оформить заказ. Попробуйте позже.";
         }
-        
+
     } else {
         $error_message = "❌ Извините, товара нет в наличии или недостаточное количество";
     }
