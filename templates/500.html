@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Ошибка сервера{% endblock %}
+{% block content %}
+  <div class="success-box">
+    <h1>500 — Ошибка сервера</h1>
+    <p class="muted">Что-то пошло не так. Попробуйте позже.</p>
+    <a class="btn" href="{{ url_for('index') }}">На главную</a>
+  </div>
+{% endblock %}

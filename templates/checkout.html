@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Оформление заказа — Магазин цветов{% endblock %}
+
+{% block content %}
+  <h1>Оформление заказа</h1>
+
+  <div class="checkout">
+    <form class="checkout-form" method="POST" action="{{ url_for('checkout') }}">
+      <label>Имя *<input type="text" name="name" required></label>
+      <label>Телефон *<input type="text" name="phone" required></label>
+      <label>Email<input type="email" name="email"></label>
+      <label>Адрес доставки *<input type="text" name="address" required></label>
+      <button type="submit">Подтвердить заказ</button>
+    </form>
+
+    <div class="checkout-summary">
+      <h3>Ваш заказ</h3>
+      <ul>
+        {% for item in cart_items %}
+          <li>{{ item['name'] }} × {{ item['quantity'] }} — {{ "%.2f"|format(item['subtotal']) }} €</li>
+        {% endfor %}
+      </ul>
+      <p class="price">Итого: {{ "%.2f"|format(total) }} €</p>
+    </div>
+  </div>
+{% endblock %}

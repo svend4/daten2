@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Корзина — Магазин цветов{% endblock %}
+
+{% block content %}
+  <h1>Корзина</h1>
+
+  {% if cart_items %}
+  <table class="cart-table">
+    <thead>
+      <tr><th>Товар</th><th>Цена</th><th>Кол-во</th><th>Сумма</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for item in cart_items %}
+      <tr>
+        <td>{{ item['name'] }}</td>
+        <td>{{ "%.2f"|format(item['price']) }} €</td>
+        <td>{{ item['quantity'] }}</td>
+        <td>{{ "%.2f"|format(item['subtotal']) }} €</td>
+        <td><a class="link-danger" href="{{ url_for('remove_from_cart', product_id=item['id']) }}">удалить</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr><td colspan="3"><b>Итого</b></td><td colspan="2"><b>{{ "%.2f"|format(total) }} €</b></td></tr>
+    </tfoot>
+  </table>
+
+  <div class="cart-actions">
+    <a class="btn-secondary" href="{{ url_for('clear_cart') }}">Очистить корзину</a>
+    <a class="btn" href="{{ url_for('checkout') }}">Оформить заказ</a>
+  </div>
+  {% else %}
+    <p class="muted">Ваша корзина пуста.</p>
+    <a class="btn" href="{{ url_for('index') }}">Перейти в каталог</a>
+  {% endif %}
+{% endblock %}

@@ -1,32 +1,44 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-  <meta charset="UTF-8" />
-  <title>Магазин цветов</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-</head>
-<body>
-  <div class="wrap">
-    <h1>🌹 Магазин цветов</h1>
-    <p class="muted">Уровень 2: Flask + SQLite + шаблоны.</p>
+{% extends "base.html" %}
+{% block title %}{{ page_title }} — Магазин цветов{% endblock %}
 
-    <div class="grid">
-      {% for p in products %}
-        <div class="card">
-          <img src="{{ url_for('static', filename=(p['image'] or 'images/rose.jpg')) }}" alt="flower">
-          <h3>{{ p['name'] }}</h3>
-          <p>{{ p['description'] }}</p>
-          <div class="price">{{ "%.2f"|format(p['price']) }} €</div>
+{% block content %}
+  <h1>{{ page_title }}</h1>
 
-          <form method="POST" action="{{ url_for('order') }}">
-            <input type="hidden" name="product_id" value="{{ p['id'] }}">
-            <input name="name" placeholder="Ваше имя" required>
-            <input name="phone" placeholder="Телефон (необязательно)">
-            <button type="submit">Заказать</button>
-          </form>
-        </div>
-      {% endfor %}
-    </div>
+  <form class="searchbar" method="GET" action="{{ url_for('index') }}">
+    <input type="text" name="search" placeholder="Поиск цветов..." value="{{ search_query or '' }}">
+    <button type="submit">Найти</button>
+  </form>
+
+  {% if categories %}
+  <div class="chips">
+    <a class="chip {% if not current_category %}chip-active{% endif %}" href="{{ url_for('index') }}">Все</a>
+    {% for c in categories %}
+      <a class="chip {% if current_category == c['id'] %}chip-active{% endif %}"
+         href="{{ url_for('index', category=c['id']) }}">{{ c['name'] }}</a>
+    {% endfor %}
   </div>
-</body>
-</html>
+  {% endif %}
+
+  {% if products %}
+  <div class="grid">
+    {% for p in products %}
+      <div class="card">
+        <a href="{{ url_for('product_detail', product_id=p['id']) }}">
+          <img src="{{ url_for('static', filename=(p['image'] or 'images/rose.jpg')) }}" alt="{{ p['name'] }}">
+        </a>
+        <h3><a href="{{ url_for('product_detail', product_id=p['id']) }}">{{ p['name'] }}</a></h3>
+        <p class="muted">{{ p['description'] }}</p>
+        <div class="price">{{ "%.2f"|format(p['price']) }} €</div>
+        <form method="POST" action="{{ url_for('add_to_cart', product_id=p['id']) }}">
+          <input type="hidden" name="quantity" value="1">
+          <button type="submit" {% if p['stock'] < 1 %}disabled{% endif %}>
+            {% if p['stock'] < 1 %}Нет в наличии{% else %}В корзину{% endif %}
+          </button>
+        </form>
+      </div>
+    {% endfor %}
+  </div>
+  {% else %}
+    <p class="muted">Товары не найдены.</p>
+  {% endif %}
+{% endblock %}

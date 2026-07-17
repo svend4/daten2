@@ -7,3 +7,45 @@ body { font-family: Arial, sans-serif; margin: 0; background: #fafafa; }
 input, button { width: 100%; padding: 10px; margin-top: 8px; border-radius: 10px; border: 1px solid #ddd; }
 button { cursor: pointer; }
 .muted { color: #777; }
+
+/* --- навигация --- */
+.nav { background: #fff; border-bottom: 1px solid #eee; }
+.nav-inner { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; }
+.brand { font-weight: bold; font-size: 18px; text-decoration: none; color: #c2185b; }
+.nav-links a { margin-left: 16px; text-decoration: none; color: #333; }
+
+/* --- флеш-сообщения --- */
+.flash { padding: 10px 14px; border-radius: 10px; margin: 12px 0; }
+.flash-success { background: #e6f4ea; color: #1e7e34; }
+.flash-error { background: #fde7ea; color: #c62828; }
+.flash-info { background: #e8f0fe; color: #1967d2; }
+
+/* --- поиск и категории --- */
+.searchbar { display: flex; gap: 8px; margin: 16px 0; }
+.searchbar input { flex: 1; }
+.searchbar button { width: auto; padding: 10px 20px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.chip { display: inline-block; padding: 6px 12px; border-radius: 20px; background: #f0f0f0;
+        text-decoration: none; color: #333; font-size: 14px; }
+.chip-active { background: #c2185b; color: #fff; }
+
+/* --- кнопки --- */
+.btn, .btn-secondary { display: inline-block; padding: 10px 20px; border-radius: 10px;
+       text-decoration: none; text-align: center; cursor: pointer; }
+.btn { background: #c2185b; color: #fff; }
+.btn-secondary { background: #f0f0f0; color: #333; }
+.link-danger { color: #c62828; }
+
+/* --- страница товара --- */
+.product-detail { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
+.product-detail img { width: 100%; border-radius: 12px; object-fit: cover; }
+@media (max-width: 640px) { .product-detail { grid-template-columns: 1fr; } }
+
+/* --- корзина и оформление --- */
+.cart-table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 12px; overflow: hidden; }
+.cart-table th, .cart-table td { padding: 12px; border-bottom: 1px solid #eee; text-align: left; }
+.cart-actions { display: flex; gap: 12px; margin-top: 16px; }
+.checkout { display: grid; grid-template-columns: 1.4fr 1fr; gap: 24px; align-items: start; }
+@media (max-width: 640px) { .checkout { grid-template-columns: 1fr; } }
+.checkout-summary { background: #fff; border: 1px solid #eee; border-radius: 12px; padding: 16px; }
+.success-box { background: #fff; border: 1px solid #eee; border-radius: 12px; padding: 24px; margin-top: 16px; }

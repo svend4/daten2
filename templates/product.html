@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}{{ product['name'] }} — Магазин цветов{% endblock %}
+
+{% block content %}
+  <p><a href="{{ url_for('index') }}">← Назад в каталог</a></p>
+
+  <div class="product-detail">
+    <img src="{{ url_for('static', filename=(product['image'] or 'images/rose.jpg')) }}" alt="{{ product['name'] }}">
+    <div class="product-info">
+      <h1>{{ product['name'] }}</h1>
+      {% if product['category_name'] %}<span class="chip">{{ product['category_name'] }}</span>{% endif %}
+      <p>{{ product['description'] }}</p>
+      <div class="price">{{ "%.2f"|format(product['price']) }} €</div>
+      <p class="muted">В наличии: {{ product['stock'] }} шт.</p>
+
+      {% if product['stock'] > 0 %}
+      <form method="POST" action="{{ url_for('add_to_cart', product_id=product['id']) }}">
+        <label>Количество
+          <input type="number" name="quantity" value="1" min="1" max="{{ product['stock'] }}">
+        </label>
+        <button type="submit">В корзину</button>
+      </form>
+      {% else %}
+      <p class="muted">Нет в наличии</p>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}

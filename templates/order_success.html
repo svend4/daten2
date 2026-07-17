@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Заказ оформлен — Магазин цветов{% endblock %}
+
+{% block content %}
+  <div class="success-box">
+    <h1>✅ Заказ #{{ order_data['order']['id'] }} оформлен!</h1>
+    <p>Спасибо, {{ order_data['order']['customer_name'] }}! Мы свяжемся с вами по телефону
+      {{ order_data['order']['phone'] }}.</p>
+
+    <h3>Состав заказа</h3>
+    <ul>
+      {% for item in order_data['items'] %}
+        <li>{{ item['name'] }} × {{ item['qty'] }} — {{ "%.2f"|format(item['price'] * item['qty']) }} €</li>
+      {% endfor %}
+    </ul>
+    <p class="price">Итого: {{ "%.2f"|format(order_data['total']) }} €</p>
+
+    <a class="btn" href="{{ url_for('index') }}">Вернуться в каталог</a>
+  </div>
+{% endblock %}
