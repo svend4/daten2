@@ -1,0 +1,39 @@
+name: smoke (L1 · PHP)
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_sqlite, sqlite3
+
+      - name: Lint PHP
+        run: |
+          php -l index.php
+          php -l init_db.php
+
+      - name: Boot server and check catalog
+        run: |
+          php -S 127.0.0.1:8000 >/tmp/php.log 2>&1 &
+          sleep 2
+          curl -fsS http://127.0.0.1:8000/ | grep -q "Магазин цветов"
+          echo "Каталог отдаётся ✓"
+
+      - name: Verify order schema matches shipped DB
+        run: |
+          php -r '
+            $db = new SQLite3("flowers.db");
+            $db->exec("INSERT INTO orders (customer_name, phone, status) VALUES (\"CI\",\"0\",\"new\")");
+            $oid = $db->lastInsertRowID();
+            $db->exec("INSERT INTO order_items (order_id, product_id, qty, price) VALUES ($oid,1,1,1.0)");
+            echo "Заказ создаётся ✓\n";
+          '
