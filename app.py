@@ -2,6 +2,10 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 from config import Config
 import database as db
+import init_db
+
+# Гарантируем наличие схемы и сида (идемпотентно)
+init_db.init_db()
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -166,17 +170,17 @@ def checkout():
             return redirect(url_for('checkout'))
         
         try:
-            # Создать заказ
-            order_id, total_amount = db.create_order(customer_data, cart_items)
-            
+            # Создать заказ; order_number — непубличный токен
+            order_number, total_amount = db.create_order(customer_data, cart_items)
+
             # Очистить корзину
             session.pop('cart', None)
-            
-            flash(f'Заказ #{order_id} успешно оформлен!', 'success')
-            return redirect(url_for('order_success', order_id=order_id))
-            
-        except Exception as e:
-            flash(f'Ошибка при создании заказа: {str(e)}', 'error')
+
+            flash('Заказ успешно оформлен!', 'success')
+            return redirect(url_for('order_success', order_number=order_number))
+
+        except Exception:
+            flash('Не удалось оформить заказ. Попробуйте позже.', 'error')
             return redirect(url_for('checkout'))
     
     # GET запрос - показать форму
@@ -195,15 +199,15 @@ def checkout():
     
     return render_template('checkout.html', cart_items=cart_products, total=total)
 
-@app.route('/order/<int:order_id>')
-def order_success(order_id):
-    """Страница успешного заказа"""
-    order_data = db.get_order_by_id(order_id)
-    
+@app.route('/order/<order_number>')
+def order_success(order_number):
+    """Страница успешного заказа (по непубличному токену)"""
+    order_data = db.get_order_by_number(order_number)
+
     if not order_data:
         flash('Заказ не найден', 'error')
         return redirect(url_for('index'))
-    
+
     return render_template('order_success.html', order_data=order_data)
 
 # ============= ОБРАБОТЧИКИ ОШИБОК =============

@@ -6,11 +6,12 @@
     <h1>✅ Заказ #{{ order_data['order']['id'] }} оформлен!</h1>
     <p>Спасибо, {{ order_data['order']['customer_name'] }}! Мы свяжемся с вами по телефону
       {{ order_data['order']['phone'] }}.</p>
+    <p class="muted">Номер для отслеживания: <code>{{ order_data['order']['order_number'] }}</code></p>
 
     <h3>Состав заказа</h3>
     <ul>
       {% for item in order_data['items'] %}
-        <li>{{ item['name'] }} × {{ item['qty'] }} — {{ "%.2f"|format(item['price'] * item['qty']) }} €</li>
+        <li>{{ item['product_name'] }} × {{ item['quantity'] }} — {{ "%.2f"|format(item['line_total']) }} €</li>
       {% endfor %}
     </ul>
     <p class="price">Итого: {{ "%.2f"|format(order_data['total']) }} €</p>

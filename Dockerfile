@@ -10,8 +10,8 @@ RUN pip install --no-cache-dir -r requirements.txt gunicorn
 # Copy application
 COPY . .
 
-# Set permissions for SQLite
-RUN chmod 666 flowers.db
+# Генерируем БД из канонических schema.sql + seed.sql
+RUN python init_db.py
 
 EXPOSE 10000
 

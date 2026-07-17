@@ -17,7 +17,10 @@ jobs:
       - name: Install deps
         run: pip install -r requirements.txt
 
-      - name: Boot app and exercise routes
+      - name: Build DB from canonical schema
+        run: python init_db.py
+
+      - name: Boot app and exercise routes (rich schema)
         env:
           SECRET_KEY: ci-test
         run: |
@@ -30,8 +33,14 @@ jobs:
           assert c.get('/product/1').status_code == 200, 'товар'
           assert c.post('/cart/add/1', data={'quantity': '1'}).status_code == 302, 'в корзину'
           assert c.get('/cart').status_code == 200, 'корзина'
-          r = c.post('/checkout', data={'name': 'CI', 'phone': '0', 'address': '—'},
+          r = c.post('/checkout', data={'name': 'CI', 'phone': '0', 'email': 'a@b.c', 'address': '—'},
                      follow_redirects=True)
           assert r.status_code == 200, 'оформление'
-          print('Все маршруты OK ✓')
+          # проверяем богатую схему: отдельный customer + токен заказа + история статусов
+          import sqlite3
+          db = sqlite3.connect('flowers.db')
+          assert db.execute('SELECT COUNT(*) FROM customers').fetchone()[0] == 1, 'customer'
+          assert db.execute('SELECT order_number FROM orders').fetchone()[0], 'order_number'
+          assert db.execute('SELECT COUNT(*) FROM order_status_history').fetchone()[0] == 1, 'history'
+          print('Маршруты + богатая схема OK ✓')
           PY
