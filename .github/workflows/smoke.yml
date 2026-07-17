@@ -1,0 +1,46 @@
+name: smoke (L7 · Microservices)
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate docker-compose
+        run: docker compose -f docker-compose.local.yml config >/dev/null && echo "compose OK ✓"
+
+      - name: Validate nginx gateway config
+        run: |
+          printf 'events{}\nhttp{\n  include /cfg/default.conf;\n}\n' > /tmp/main.conf
+          docker run --rm \
+            -v "$PWD/api-gateway/nginx.conf:/cfg/default.conf:ro" \
+            -v /tmp/main.conf:/etc/nginx/nginx.conf:ro \
+            nginx:alpine nginx -t
+          echo "nginx config OK ✓"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Product-service syntax
+        run: node --check services/product-service/server.js
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Python services syntax
+        run: |
+          python -m py_compile services/order-service/app.py
+          python -m py_compile services/notification-service/worker.py
+          echo "services OK ✓"
+
+      - name: Assert gateway/service port alignment
+        run: |
+          grep -q "product-service:3001" api-gateway/nginx.conf
+          grep -q "order-service:8000" api-gateway/nginx.conf
+          grep -q "PORT: 3001" docker-compose.local.yml
+          grep -q "PORT: 8000" docker-compose.local.yml
+          echo "Порты gateway↔сервисы согласованы ✓"
