@@ -1,0 +1,41 @@
+name: smoke (L5 · React + Flask)
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install backend deps
+        run: pip install -r backend/requirements.txt
+      - name: Boot API and check endpoints
+        working-directory: backend
+        run: |
+          python - <<'PY'
+          import api
+          api.app.config['TESTING'] = True
+          c = api.app.test_client()
+          r = c.get('/api/products')
+          assert r.status_code == 200 and isinstance(r.get_json(), list), 'каталог API'
+          print('API /api/products OK ✓')
+          PY
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Build SPA
+        working-directory: frontend
+        run: |
+          npm install
+          npm run build
+          test -d dist && echo "Сборка фронта OK ✓"
