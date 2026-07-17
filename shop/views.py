@@ -4,7 +4,7 @@ from decimal import Decimal
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
 
-from .models import Product, Customer, Order, OrderItem
+from .models import Product, Customer, Order, OrderItem, OrderStatusHistory
 
 
 def index(request):
@@ -40,26 +40,30 @@ def create_order(request, product_id):
         return redirect('index')
 
     try:
-        customer = Customer.objects.create(
-            name=name,
-            phone=phone,
-            address='—',
-        )
+        line_total = Decimal(product.price)
+        customer = Customer.objects.create(name=name, phone=phone)
         order = Order.objects.create(
             customer=customer,
-            total_amount=Decimal(product.price),
-            delivery_address='—',
+            subtotal=line_total,
+            total_amount=line_total,
+            payment_status='pending',
         )
         OrderItem.objects.create(
             order=order,
             product=product,
+            product_name=product.name,
             quantity=1,
-            price=product.price,
+            unit_price=product.price,
+            line_total=line_total,
         )
+        OrderStatusHistory.objects.create(order=order, status='new', note='Заказ создан')
         product.stock -= 1
         product.save()
 
-        messages.success(request, f'Заказ #{order.id} на «{product.name}» оформлен!')
+        messages.success(
+            request,
+            f'Заказ на «{product.name}» оформлен! Номер для отслеживания: {order.order_number}'
+        )
     except Exception:
         messages.error(request, 'Не удалось оформить заказ. Попробуйте позже.')
 

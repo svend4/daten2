@@ -73,32 +73,31 @@ class OrderItemInline(admin.TabularInline):
     """Inline для товаров в заказе"""
     model = OrderItem
     extra = 0
-    readonly_fields = ['product', 'quantity', 'price', 'subtotal']
+    readonly_fields = ['product', 'product_name', 'quantity', 'unit_price', 'line_total']
     can_delete = False
-    
-    def subtotal(self, obj):
-        return obj.subtotal
 
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
     """Админка заказов"""
     list_display = [
-        'id', 'customer', 'total_amount',
-        'status_badge', 'created_at'
+        'id', 'order_number', 'customer', 'total_amount',
+        'payment_status', 'status_badge', 'created_at'
     ]
-    list_filter = ['status', 'created_at']
-    search_fields = ['id', 'customer__name', 'customer__phone']
+    list_filter = ['status', 'payment_status', 'created_at']
+    search_fields = ['id', 'order_number', 'customer__name', 'customer__phone']
     ordering = ['-created_at']
-    readonly_fields = ['created_at', 'updated_at', 'total_amount']
+    readonly_fields = ['order_number', 'created_at', 'updated_at', 'subtotal', 'total_amount']
     inlines = [OrderItemInline]
-    
+
     fieldsets = (
         ('Клиент', {
             'fields': ('customer',)
         }),
         ('Заказ', {
-            'fields': ('status', 'total_amount', 'delivery_address', 'notes')
+            'fields': ('order_number', 'status', 'payment_status', 'subtotal',
+                       'discount', 'delivery_fee', 'total_amount',
+                       'delivery_address', 'delivery_date', 'notes')
         }),
         ('Даты', {
             'fields': ('created_at', 'updated_at')

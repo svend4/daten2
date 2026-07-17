@@ -28,17 +28,21 @@ jobs:
       - name: Migrate (creates schema + seed)
         run: python manage.py migrate --noinput
 
-      - name: Catalog + order via test client
+      - name: Catalog + order via test client (rich schema)
         run: |
           python - <<'PY'
           import django; django.setup()
           from django.test import Client
-          from shop.models import Product, Order
+          from shop.models import Product, Order, OrderStatusHistory
           c = Client()
           assert c.get('/').status_code == 200, 'каталог'
           assert 'Красная роза' in c.get('/').content.decode(), 'сид виден'
           pid = Product.objects.first().id
           assert c.post(f'/order/{pid}/', {'name': 'CI', 'phone': '0'}).status_code == 302, 'заказ'
-          assert Order.objects.count() == 1, 'заказ сохранён'
-          print('Каталог, поиск, заказ OK ✓')
+          o = Order.objects.get()
+          assert len(o.order_number) == 32, 'order_number токен'
+          assert o.payment_status == 'pending', 'payment_status'
+          assert o.items.first().line_total == o.total_amount, 'снимок позиции'
+          assert OrderStatusHistory.objects.count() == 1, 'история статусов'
+          print('Каталог + богатая схема OK ✓')
           PY
