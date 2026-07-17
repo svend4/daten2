@@ -1,6 +1,5 @@
 # shop/models.py
 from django.db import models
-from django.urls import reverse
 from django.core.validators import MinValueValidator
 
 class Category(models.Model):
@@ -17,9 +16,6 @@ class Category(models.Model):
     
     def __str__(self):
         return self.name
-    
-    def get_absolute_url(self):
-        return reverse('shop:category', kwargs={'slug': self.slug})
 
 
 class Product(models.Model):
@@ -39,11 +35,10 @@ class Product(models.Model):
         related_name='products',
         verbose_name='Категория'
     )
-    image = models.ImageField(
-        'Изображение',
-        upload_to='products/',
-        blank=True,
-        null=True
+    image = models.CharField(
+        'Изображение (путь или URL)',
+        max_length=500,
+        blank=True
     )
     stock = models.PositiveIntegerField(
         'Количество на складе',
@@ -66,10 +61,7 @@ class Product(models.Model):
     
     def __str__(self):
         return self.name
-    
-    def get_absolute_url(self):
-        return reverse('shop:product_detail', kwargs={'slug': self.slug})
-    
+
     @property
     def is_in_stock(self):
         """Проверка наличия на складе"""
@@ -148,9 +140,6 @@ class Order(models.Model):
     
     def __str__(self):
         return f"Заказ #{self.id} - {self.customer.name}"
-    
-    def get_absolute_url(self):
-        return reverse('shop:order_detail', kwargs={'pk': self.pk})
 
 
 class OrderItem(models.Model):

@@ -44,11 +44,12 @@ class ProductAdmin(admin.ModelAdmin):
     )
     
     def image_preview(self, obj):
-        """Превью изображения"""
+        """Превью изображения (image — путь или URL)"""
         if obj.image:
+            src = obj.image if obj.image.startswith('http') else '/static/' + obj.image
             return format_html(
                 '<img src="{}" style="max-height: 100px; max-width: 100px;" />',
-                obj.image.url
+                src
             )
         return '-'
     image_preview.short_description = 'Превью'
