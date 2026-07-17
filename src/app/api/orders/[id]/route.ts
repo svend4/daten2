@@ -13,11 +13,11 @@ export async function GET(
   { params }: RouteParams
 ) {
   try {
-    // Поиск по непубличному токену, а не по последовательному ID —
+    // Поиск по непубличному номеру заказа, а не по последовательному ID —
     // исключает перебор чужих заказов (IDOR).
-    const token = params.id;
+    const orderNumber = params.id;
 
-    if (!token || token.length < 8) {
+    if (!orderNumber || orderNumber.length < 8) {
       return NextResponse.json(
         {
           success: false,
@@ -28,7 +28,7 @@ export async function GET(
     }
 
     const order = await prisma.order.findUnique({
-      where: { token },
+      where: { orderNumber },
       include: {
         customer: true,
         items: {

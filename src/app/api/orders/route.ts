@@ -58,20 +58,23 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Рассчитать общую сумму
-    let totalAmount = new Decimal(0);
+    // Рассчитать суммы и собрать позиции со снимком названия/цены
+    let subtotal = new Decimal(0);
     const orderItems = items.map((item, index) => {
       const product = productsData[index]!;
-      const price = new Decimal(product.price.toString());
-      const subtotal = price.mul(item.quantity);
-      totalAmount = totalAmount.add(subtotal);
+      const unitPrice = new Decimal(product.price.toString());
+      const lineTotal = unitPrice.mul(item.quantity);
+      subtotal = subtotal.add(lineTotal);
 
       return {
         productId: item.productId,
+        productName: product.name,
         quantity: item.quantity,
-        price: product.price,
+        unitPrice: product.price,
+        lineTotal,
       };
     });
+    const totalAmount = subtotal; // discount/deliveryFee = 0 для демо
 
     // Создать заказ в транзакции
     const order = await prisma.$transaction(async (tx) => {
@@ -89,12 +92,17 @@ export async function POST(request: NextRequest) {
       const newOrder = await tx.order.create({
         data: {
           customerId: newCustomer.id,
+          subtotal,
           totalAmount,
           deliveryAddress: customer.address,
           notes: notes || null,
           status: 'NEW',
+          paymentStatus: 'PENDING',
           items: {
             create: orderItems,
+          },
+          statusHistory: {
+            create: { status: 'NEW', note: 'Заказ создан' },
           },
         },
         include: {

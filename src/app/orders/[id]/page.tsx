@@ -215,20 +215,18 @@ export default function OrderSuccessPage({ params }: PageProps) {
                           </div>
                         )}
                         <span className="font-medium">
-                          {item.product?.name}
+                          {item.productName ?? item.product?.name}
                         </span>
                       </div>
                     </td>
                     <td className="text-right py-3 px-2">
-                      {formatPrice(item.price)}
+                      {formatPrice(item.unitPrice)}
                     </td>
                     <td className="text-center py-3 px-2">
                       {item.quantity} шт.
                     </td>
                     <td className="text-right py-3 px-2 font-semibold">
-                      {formatPrice(
-                        parseFloat(item.price.toString()) * item.quantity
-                      )}
+                      {formatPrice(item.lineTotal)}
                     </td>
                   </tr>
                 ))}

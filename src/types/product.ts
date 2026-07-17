@@ -6,10 +6,13 @@ export interface Product {
   slug: string;
   description: string | null;
   price: number;
+  currency: string;
+  sku: string | null;
   categoryId: number;
   image: string | null;
   stock: number;
   isActive: boolean;
+  isFeatured: boolean;
   createdAt: Date;
   updatedAt: Date;
   category?: Category;
