@@ -1,0 +1,34 @@
+name: smoke (L4 · Express)
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install deps
+        run: npm install
+
+      - name: Syntax check
+        run: |
+          node --check server.js
+          node --check app.js
+
+      - name: Boot server and check catalog + order
+        run: |
+          PORT=3000 node server.js >/tmp/node.log 2>&1 &
+          sleep 3
+          curl -fsS http://127.0.0.1:3000/ | grep -qi "цвет"
+          echo "Каталог отдаётся ✓"
+          code=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+            -d "name=CI&phone=0&product_id=1&quantity=1" http://127.0.0.1:3000/order)
+          test "$code" = "200"
+          echo "Заказ оформляется ✓"
