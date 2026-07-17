@@ -1,10 +1,19 @@
+import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = 'dev-secret-key-change-me'
-DEBUG = True
-ALLOWED_HOSTS = ['*']
+# Секреты и флаги окружения. Без SECRET_KEY в проде — только небезопасный dev-ключ.
+SECRET_KEY = os.environ.get('SECRET_KEY', 'insecure-dev-key-do-not-use-in-production')
+
+# DEBUG выключен по умолчанию; включается только явным DEBUG=true.
+DEBUG = os.environ.get('DEBUG', 'false').lower() in ('1', 'true', 'yes')
+
+# Хосты из ALLOWED_HOSTS (через запятую). На Render добавьте домен сервиса.
+ALLOWED_HOSTS = [h.strip() for h in os.environ.get('ALLOWED_HOSTS', '.onrender.com,localhost,127.0.0.1').split(',') if h.strip()]
+
+# CSRF для домена Render (HTTPS)
+CSRF_TRUSTED_ORIGINS = ['https://*.onrender.com']
 
 INSTALLED_APPS = [
     'django.contrib.admin',
