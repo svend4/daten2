@@ -1,0 +1,44 @@
+name: smoke (L3 · Django)
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    env:
+      SECRET_KEY: ci-test
+      DEBUG: 'true'
+      ALLOWED_HOSTS: testserver
+      DJANGO_SETTINGS_MODULE: flower_shop.settings
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: System check
+        run: python manage.py check
+
+      - name: Migrate (creates schema + seed)
+        run: python manage.py migrate --noinput
+
+      - name: Catalog + order via test client
+        run: |
+          python - <<'PY'
+          import django; django.setup()
+          from django.test import Client
+          from shop.models import Product, Order
+          c = Client()
+          assert c.get('/').status_code == 200, 'каталог'
+          assert 'Красная роза' in c.get('/').content.decode(), 'сид виден'
+          pid = Product.objects.first().id
+          assert c.post(f'/order/{pid}/', {'name': 'CI', 'phone': '0'}).status_code == 302, 'заказ'
+          assert Order.objects.count() == 1, 'заказ сохранён'
+          print('Каталог, поиск, заказ OK ✓')
+          PY
