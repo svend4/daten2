@@ -1,0 +1,37 @@
+name: smoke (L2 · Flask)
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Boot app and exercise routes
+        env:
+          SECRET_KEY: ci-test
+        run: |
+          python - <<'PY'
+          from app import app
+          app.config['TESTING'] = True
+          c = app.test_client()
+          assert c.get('/').status_code == 200, 'каталог'
+          assert c.get('/?search=роза').status_code == 200, 'поиск'
+          assert c.get('/product/1').status_code == 200, 'товар'
+          assert c.post('/cart/add/1', data={'quantity': '1'}).status_code == 302, 'в корзину'
+          assert c.get('/cart').status_code == 200, 'корзина'
+          r = c.post('/checkout', data={'name': 'CI', 'phone': '0', 'address': '—'},
+                     follow_redirects=True)
+          assert r.status_code == 200, 'оформление'
+          print('Все маршруты OK ✓')
+          PY
