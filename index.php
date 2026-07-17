@@ -1,8 +1,16 @@
 <?php
 // index.php - ВЕСЬ САЙТ В ОДНОМ ФАЙЛЕ!
 
+// Гарантируем наличие БД (схема + сид из канонических schema.sql/seed.sql)
+require_once __DIR__ . '/init_db.php';
+$dbFile = getenv('DATABASE_PATH') ?: __DIR__ . '/flowers.db';
+if (!file_exists($dbFile)) {
+    init_flower_db($dbFile);
+}
+
 // Подключение к базе данных
-$db = new SQLite3('flowers.db');
+$db = new SQLite3($dbFile);
+$db->exec('PRAGMA foreign_keys = ON');
 
 // Переменные для сообщений
 $success_message = '';
@@ -18,32 +26,52 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
     $product_id = $_POST['product_id'];
     $quantity = $_POST['quantity'];
     
-    // Получить цену товара
-    $stmt = $db->prepare('SELECT price, stock FROM products WHERE id = ?');
+    // Получить товар (имя нужно для снимка в позиции заказа)
+    $stmt = $db->prepare('SELECT name, price, stock FROM products WHERE id = ?');
     $stmt->bindValue(1, $product_id, SQLITE3_INTEGER);
     $result = $stmt->execute();
     $product = $result->fetchArray(SQLITE3_ASSOC);
     
     if ($product && $quantity > 0 && $product['stock'] >= $quantity) {
-        $total = $product['price'] * $quantity;
+        $line_total = $product['price'] * $quantity;
+        $order_number = bin2hex(random_bytes(16)); // непубличный токен заказа
 
         // Начать транзакцию
         $db->exec('BEGIN');
 
         try {
-            // Создать заказ (схема БД: orders хранит имя и телефон напрямую)
-            $stmt = $db->prepare('INSERT INTO orders (customer_name, phone, status) VALUES (?, ?, "new")');
+            // Покупатель (отдельная сущность)
+            $stmt = $db->prepare('INSERT INTO customers (name, phone, email, address) VALUES (?, ?, ?, ?)');
             $stmt->bindValue(1, $name, SQLITE3_TEXT);
             $stmt->bindValue(2, $phone, SQLITE3_TEXT);
+            $stmt->bindValue(3, $email, SQLITE3_TEXT);
+            $stmt->bindValue(4, $address, SQLITE3_TEXT);
+            $stmt->execute();
+            $customer_id = $db->lastInsertRowID();
+
+            // Заказ (токен, суммы, статус оплаты)
+            $stmt = $db->prepare('INSERT INTO orders (order_number, customer_id, subtotal, total_amount, delivery_address, status, payment_status) VALUES (?, ?, ?, ?, ?, "new", "pending")');
+            $stmt->bindValue(1, $order_number, SQLITE3_TEXT);
+            $stmt->bindValue(2, $customer_id, SQLITE3_INTEGER);
+            $stmt->bindValue(3, $line_total, SQLITE3_FLOAT);
+            $stmt->bindValue(4, $line_total, SQLITE3_FLOAT);
+            $stmt->bindValue(5, $address, SQLITE3_TEXT);
             $stmt->execute();
             $order_id = $db->lastInsertRowID();
 
-            // Добавить товар в заказ (колонка qty согласно схеме)
-            $stmt = $db->prepare('INSERT INTO order_items (order_id, product_id, qty, price) VALUES (?, ?, ?, ?)');
+            // Позиция заказа со снимком названия и цены (каноническое quantity)
+            $stmt = $db->prepare('INSERT INTO order_items (order_id, product_id, product_name, quantity, unit_price, line_total) VALUES (?, ?, ?, ?, ?, ?)');
             $stmt->bindValue(1, $order_id, SQLITE3_INTEGER);
             $stmt->bindValue(2, $product_id, SQLITE3_INTEGER);
-            $stmt->bindValue(3, $quantity, SQLITE3_INTEGER);
-            $stmt->bindValue(4, $product['price'], SQLITE3_FLOAT);
+            $stmt->bindValue(3, $product['name'], SQLITE3_TEXT);
+            $stmt->bindValue(4, $quantity, SQLITE3_INTEGER);
+            $stmt->bindValue(5, $product['price'], SQLITE3_FLOAT);
+            $stmt->bindValue(6, $line_total, SQLITE3_FLOAT);
+            $stmt->execute();
+
+            // История статусов (аудит)
+            $stmt = $db->prepare('INSERT INTO order_status_history (order_id, status, note) VALUES (?, "new", "Заказ создан")');
+            $stmt->bindValue(1, $order_id, SQLITE3_INTEGER);
             $stmt->execute();
 
             // Уменьшить остаток на складе
@@ -54,7 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
 
             $db->exec('COMMIT');
 
-            $success_message = "✅ Заказ #$order_id успешно оформлен! Сумма: $total руб. Мы свяжемся с вами по телефону " . htmlspecialchars($phone);
+            $success_message = "✅ Заказ #$order_id оформлен! Сумма: " . number_format($line_total, 2) . " €. Номер для отслеживания: " . htmlspecialchars($order_number);
 
         } catch (Exception $e) {
             $db->exec('ROLLBACK');

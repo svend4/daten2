@@ -1,80 +1,17 @@
 <?php
-// init_db.php - Запустить ОДИН РАЗ для создания базы
+// init_db.php — генерирует flowers.db из канонических schema.sql + seed.sql.
+// Идемпотентно: schema — CREATE IF NOT EXISTS, seed — INSERT OR IGNORE.
 
-$db = new SQLite3('flowers.db');
+function init_flower_db($dbPath = null) {
+    $dbPath = $dbPath ?: (getenv('DATABASE_PATH') ?: __DIR__ . '/flowers.db');
+    $db = new SQLite3($dbPath);
+    $db->exec(file_get_contents(__DIR__ . '/schema.sql'));
+    $db->exec(file_get_contents(__DIR__ . '/seed.sql'));
+    $db->close();
+    return $dbPath;
+}
 
-// Создать таблицу категорий
-$db->exec('
-    CREATE TABLE IF NOT EXISTS categories (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL
-    )
-');
-
-// Создать таблицу товаров
-$db->exec('
-    CREATE TABLE IF NOT EXISTS products (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        description TEXT,
-        price REAL NOT NULL,
-        image TEXT,
-        category_id INTEGER,
-        stock INTEGER DEFAULT 0,
-        is_active INTEGER DEFAULT 1
-    )
-');
-
-// Создать таблицу клиентов
-$db->exec('
-    CREATE TABLE IF NOT EXISTS customers (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        phone TEXT NOT NULL,
-        email TEXT,
-        address TEXT
-    )
-');
-
-// Создать таблицу заказов
-$db->exec('
-    CREATE TABLE IF NOT EXISTS orders (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        customer_id INTEGER NOT NULL,
-        total_amount REAL NOT NULL,
-        status TEXT DEFAULT "new",
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-');
-
-// Создать таблицу товаров в заказе
-$db->exec('
-    CREATE TABLE IF NOT EXISTS order_items (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        order_id INTEGER NOT NULL,
-        product_id INTEGER NOT NULL,
-        quantity INTEGER NOT NULL,
-        price REAL NOT NULL
-    )
-');
-
-// Добавить категории
-$db->exec("INSERT INTO categories (name) VALUES ('Розы')");
-$db->exec("INSERT INTO categories (name) VALUES ('Тюльпаны')");
-$db->exec("INSERT INTO categories (name) VALUES ('Букеты')");
-
-// Добавить товары
-$db->exec("
-    INSERT INTO products (name, description, price, category_id, image, stock) VALUES
-    ('Красная роза', 'Классическая красная роза премиум класса', 150.00, 1, 'images/rose-red.jpg', 50),
-    ('Белая роза', 'Нежная белая роза', 140.00, 1, 'images/rose-white.jpg', 30),
-    ('Желтый тюльпан', 'Яркий желтый тюльпан', 80.00, 2, 'images/tulip-yellow.jpg', 100),
-    ('Розовый тюльпан', 'Нежно-розовый тюльпан', 85.00, 2, 'images/tulip-yellow.jpg', 80),
-    ('Букет Романтика', 'Букет из 15 красных роз', 2200.00, 3, 'images/bouquet.jpg', 10)
-");
-
-echo "✅ База данных создана успешно!<br>";
-echo "Теперь можно открыть index.php";
-
-$db->close();
-?>
+// Запуск из CLI: php init_db.php
+if (PHP_SAPI === 'cli' && isset($argv[0]) && realpath($argv[0]) === realpath(__FILE__)) {
+    echo 'БД готова: ' . init_flower_db() . "\n";
+}

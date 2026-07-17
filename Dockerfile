@@ -13,8 +13,9 @@ WORKDIR /var/www/html
 # Copy application files
 COPY . .
 
-# Set permissions for SQLite database
-RUN chmod 666 flowers.db && \
+# Генерируем БД из канонических schema.sql + seed.sql и выставляем права
+RUN php init_db.php && \
+    chmod 666 flowers.db && \
     chown -R www-data:www-data /var/www/html
 
 # Expose port

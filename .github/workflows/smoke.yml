@@ -21,19 +21,27 @@ jobs:
           php -l index.php
           php -l init_db.php
 
-      - name: Boot server and check catalog
+      - name: Build DB from canonical schema
+        run: php init_db.php
+
+      - name: Boot server and check catalog + rich order
         run: |
           php -S 127.0.0.1:8000 >/tmp/php.log 2>&1 &
           sleep 2
           curl -fsS http://127.0.0.1:8000/ | grep -q "Магазин цветов"
           echo "Каталог отдаётся ✓"
+          curl -fsS -X POST \
+            -d "action=order&name=CI&phone=0&email=a@b.c&address=x&product_id=1&quantity=1" \
+            http://127.0.0.1:8000/ | grep -q "оформлен"
+          echo "Заказ оформляется ✓"
 
-      - name: Verify order schema matches shipped DB
+      - name: Assert rich schema invariants
         run: |
           php -r '
             $db = new SQLite3("flowers.db");
-            $db->exec("INSERT INTO orders (customer_name, phone, status) VALUES (\"CI\",\"0\",\"new\")");
-            $oid = $db->lastInsertRowID();
-            $db->exec("INSERT INTO order_items (order_id, product_id, qty, price) VALUES ($oid,1,1,1.0)");
-            echo "Заказ создаётся ✓\n";
+            $c = $db->query("SELECT COUNT(*) c FROM customers")->fetchArray()["c"];
+            $on = $db->query("SELECT order_number FROM orders LIMIT 1")->fetchArray()["order_number"];
+            $h = $db->query("SELECT COUNT(*) c FROM order_status_history")->fetchArray()["c"];
+            if ($c < 1 || strlen($on) !== 32 || $h < 1) { fwrite(STDERR, "schema invariants failed\n"); exit(1); }
+            echo "Богатая схема OK ✓\n";
           '
