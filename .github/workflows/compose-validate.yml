@@ -31,17 +31,17 @@ jobs:
       - name: Assert default services are exactly L1-L5 + router + AI layer
         run: |
           set -e
-          expected="autonomous distillation evals firewall level1 level2 level3 level4 level5 manager market observability rag router search storefront twin vision"
+          expected="autonomous distillation evals firewall green-router level1 level2 level3 level4 level5 manager market observability rag router search storefront twin vision"
           actual="$(docker compose config --services | sort | tr '\n' ' ' | sed 's/ *$//')"
           echo "default services: $actual"
           [ "$actual" = "$expected" ] || { echo "::error::default service set changed (got: $actual)"; exit 1; }
 
-      - name: Assert full set has all 29 services
+      - name: Assert full set has all 30 services
         run: |
           set -e
           count="$(docker compose --profile full --profile enterprise --profile commerce config --services | wc -l | tr -d ' ')"
           echo "total services: $count"
-          [ "$count" = "29" ] || { echo "::error::expected 29 services, got $count"; exit 1; }
+          [ "$count" = "30" ] || { echo "::error::expected 30 services, got $count"; exit 1; }
 
       - name: Assert L7 mount files exist
         run: |
