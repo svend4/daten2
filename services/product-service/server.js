@@ -5,6 +5,7 @@ const app = express();
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 app.get('/health', (_, res) => res.json({ ok: true }));
+app.get('/api/health', (_, res) => res.json({ ok: true, level: 7, stack: 'Microservices' }));
 
 app.get('/api/products', async (_, res) => {
   try {
