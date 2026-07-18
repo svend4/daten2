@@ -249,6 +249,16 @@ services:
     ports: ["8076:8076"]
     depends_on: ["router"]
 
+  autonomous:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/autonomous-manager-GBpVR
+    environment:
+      BACKEND_URL: http://router:8073
+      AUTO_DRY_RUN: "true"     # безопасно по умолчанию: только симуляция
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8077:8077"]
+    depends_on: ["router"]
+
   # ======================= ОБЩИЕ СЕРВИСЫ (профиль commerce) =======================
   auth:
     build:
