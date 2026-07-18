@@ -1,0 +1,16 @@
+{
+  "name": "flower-shop-agent-market",
+  "version": "1.0.0",
+  "description": "Мультиагентность (agent-to-agent): покупатель-агент ↔ продавец-переговорщик ↔ управляющий торгуются по протоколу и заключают сделку через единый контракт",
+  "private": true,
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.mjs"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "@anthropic-ai/sdk": "^0.65.0"
+  }
+}

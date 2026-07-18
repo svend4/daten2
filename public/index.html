@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Магазин цветов — рынок агентов</title>
+<style>
+  :root{
+    --bg:#f6f5fb; --surface:#fff; --border:#e5e2f0; --ink:#211d2b; --soft:#565; --faint:#867e97;
+    --seller:#6a3fb0; --seller-soft:#ece3f7; --buyer:#0f7a55; --buyer-soft:#dcefe8; --bot:#efeaf4;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; --mono:ui-monospace,monospace;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --bg:#131120; --surface:#1b1826; --border:#2e2740; --ink:#ece7f5; --soft:#a99fbd; --faint:#7a7191;
+    --seller:#b18ce6; --seller-soft:#251c33; --buyer:#4fc09a; --buyer-soft:#15251f; --bot:#241d30;
+  }}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);min-height:100vh}
+  header{padding:16px 22px;border-bottom:1px solid var(--border);background:var(--surface);display:flex;align-items:center;gap:10px}
+  header h1{font-size:18px;margin:0}
+  header .badge{font-size:11px;color:var(--faint);margin-left:auto;font-family:var(--mono)}
+  main{max-width:760px;margin:0 auto;padding:20px;display:grid;gap:16px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px}
+  .card h2{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--soft)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  label{font-size:13px;color:var(--soft);display:flex;gap:6px;align-items:center}
+  select,input{padding:8px 10px;border:1px solid var(--border);border-radius:9px;background:var(--bg);color:var(--ink);font-size:14px}
+  button{padding:9px 16px;border:none;border-radius:10px;background:var(--seller);color:#fff;font-weight:600;cursor:pointer;font-size:14px}
+  .msg{display:flex;margin-bottom:10px}
+  .msg.buyer{justify-content:flex-end}
+  .bubble{max-width:72%;padding:8px 12px;border-radius:14px;font-size:14px;line-height:1.4}
+  .seller .bubble{background:var(--seller-soft);border-bottom-left-radius:4px}
+  .buyer .bubble{background:var(--buyer-soft);border-bottom-right-radius:4px}
+  .who{font-size:11px;color:var(--faint);margin-bottom:3px}
+  .price{font-family:var(--mono);font-weight:700}
+  .deal{border-radius:12px;padding:12px 14px;margin-top:8px;font-size:15px}
+  .deal.ok{background:var(--buyer-soft)} .deal.no{background:var(--seller-soft)}
+  .muted{color:var(--faint);font-size:13px}
+</style>
+</head>
+<body>
+  <header>
+    <span style="font-size:22px">🤝</span>
+    <h1>Рынок агентов · переговоры</h1>
+    <span class="badge" id="engine"></span>
+  </header>
+  <main>
+    <div class="card">
+      <h2>Условия сделки</h2>
+      <div class="row">
+        <label>Товар <select id="product"></select></label>
+        <label>Кол-во <input id="qty" type="number" value="3" min="1" style="width:70px"></label>
+        <label>Бюджет/ед, € <input id="budget" type="number" value="1.9" step="0.1" style="width:80px"></label>
+        <button onclick="run()">▶ Запустить торг</button>
+      </div>
+      <div class="muted" id="hint" style="margin-top:8px"></div>
+    </div>
+    <div class="card">
+      <h2>Переговоры (продавец ↔ покупатель)</h2>
+      <div id="chat"><span class="muted">Запустите торг</span></div>
+      <div id="deal"></div>
+    </div>
+  </main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const money = (n) => n==null?'':Number(n).toFixed(2)+' €';
+let CAT = [];
+
+fetch('/api/catalog').then(r=>r.json()).then(d=>{ CAT=d.products||[];
+  $('product').innerHTML = CAT.map(p=>`<option value="${p.id}">${p.name} — ${money(p.price)}</option>`).join('');
+  hint();
+});
+$('product').addEventListener('change',hint);
+function hint(){ const p=CAT.find(x=>String(x.id)===$('product').value)||CAT[0]; if(p) $('hint').textContent=`Прайс ${money(p.price)}. Пол ≈ ${money(p.price*0.8)} (макс. скидка 20%). Бюджет ниже пола → сделки не будет.`; }
+
+const TYPE={greet:'👋',ask:'📢',bid:'💬',accept:'✅',reject:'❌'};
+async function run(){
+  $('chat').innerHTML='<span class="muted">торгуемся…</span>'; $('deal').innerHTML='';
+  const body={ productId:$('product').value, quantity:+$('qty').value, buyerBudget:+$('budget').value };
+  try{
+    const d=await (await fetch('/api/negotiate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})).json();
+    if(d.error){ $('chat').innerHTML='<span class="muted">'+d.error+'</span>'; return; }
+    $('chat').innerHTML = d.transcript.map(m=>`
+      <div class="msg ${m.from}"><div>
+        <div class="who">${m.from==='seller'?'Продавец':'Покупатель'} ${TYPE[m.type]||''} · раунд ${m.round}</div>
+        <div class="bubble">${m.note?m.note+' ':''}${m.price!=null?`<span class="price">${money(m.price)}</span>`:''}</div>
+      </div></div>`).join('');
+    if(d.deal){ $('deal').innerHTML=`<div class="deal ok">✅ Сделка: <span class="price">${money(d.deal.agreed_unit)}</span>/ед (−${d.deal.discount_pct}% от прайса, ${d.deal.rounds} раунд.). Итог ${money(d.deal.agreed_total)} за ${d.quantity} шт.${d.order&&d.order.order_number?` · Заказ ${d.order.order_number}`:''}</div>`; }
+    else { $('deal').innerHTML=`<div class="deal no">❌ Сделка не состоялась: бюджет ниже пола продавца.</div>`; }
+  }catch(e){ $('chat').innerHTML='<span class="muted">Ошибка сети</span>'; }
+}
+fetch('/api/health').then(r=>r.json()).then(d=>{ $('engine').textContent=(d.engine==='llm'?'Claude-агенты':'rule-based')+' · '+d.backend; });
+</script>
+</body>
+</html>
