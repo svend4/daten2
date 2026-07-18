@@ -1,0 +1,16 @@
+{
+  "name": "flower-shop-ops-ledger",
+  "version": "1.0.0",
+  "description": "Counterfactual AI-ops ledger: append-only хэш-цепь операционных решений ИИ + off-policy оценка (IPS/SNIPS) — сколько заработала бы ДРУГАЯ политика на уже залогированных решениях, без её выката",
+  "private": true,
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.mjs"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "@anthropic-ai/sdk": "^0.65.0"
+  }
+}

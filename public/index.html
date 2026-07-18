@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Counterfactual AI-ops ledger</title>
+<style>
+  :root { --bg:#0d1017; --card:#151a22; --line:#232b36; --ink:#e7edf4; --dim:#8a96a6; --ok:#3fb98a; --bad:#e5544b; --acc:#f0a95c; --acc2:#6ea8fe; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.5 system-ui,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+  header { padding:22px 26px; border-bottom:1px solid var(--line); }
+  h1 { margin:0; font-size:19px; } h1 small { color:var(--dim); font-weight:400; font-size:13px; }
+  main { max-width:1000px; margin:0 auto; padding:22px 26px 60px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px; }
+  button { background:var(--acc); color:#1a1206; border:0; padding:9px 16px; border-radius:8px; font:inherit; font-weight:600; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--ink); border:1px solid var(--line); }
+  .cards { display:flex; gap:12px; flex-wrap:wrap; margin:6px 0 20px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 16px; min-width:120px; }
+  .stat b { font-size:24px; display:block; } .stat span { color:var(--dim); font-size:12px; }
+  h2 { font-size:14px; text-transform:uppercase; letter-spacing:.04em; color:var(--dim); margin:24px 0 10px; }
+  .bar { display:flex; align-items:center; gap:10px; margin:6px 0; }
+  .bar .name { width:130px; font-size:14px; } .bar .track { flex:1; background:#0a0e14; border-radius:6px; height:22px; position:relative; overflow:hidden; }
+  .bar .fill { height:100%; border-radius:6px; background:var(--acc2); }
+  .bar.best .fill { background:var(--ok); } .bar .val { width:130px; text-align:right; font-variant-numeric:tabular-nums; font-size:13px; color:var(--dim); }
+  .logged-line { border-top:1px dashed var(--acc); margin:10px 0; padding-top:6px; color:var(--acc); font-size:13px; }
+  .rec { background:rgba(63,185,138,.1); border:1px solid var(--ok); color:#a7e6cd; padding:12px 16px; border-radius:10px; margin:14px 0; font-weight:600; display:none; }
+  table { width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); border-radius:10px; overflow:hidden; font-size:14px; }
+  th,td { text-align:left; padding:8px 12px; border-bottom:1px solid var(--line); } th { color:var(--dim); font-size:12px; text-transform:uppercase; }
+  tr:last-child td { border-bottom:0; }
+  .pill { font-size:12px; padding:1px 7px; border-radius:20px; } .pill.ok { background:rgba(63,185,138,.15); color:var(--ok); } .pill.bad { background:rgba(229,84,75,.15); color:var(--bad); }
+  .hint { color:var(--dim); font-size:13px; } code { background:#0a0e14; padding:1px 6px; border-radius:5px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Counterfactual AI-ops ledger <small>— журнал решений ИИ + off-policy оценка «а что заработала бы другая политика»</small></h1>
+</header>
+<main>
+  <p class="hint">Каждое операционное решение ИИ (какой уровень выбрать, дозаказывать ли, как назначить цену) пишется в <b>append-only хэш-цепь</b> вместе с альтернативами и propensity. Оценщик <b>off-policy (IPS/SNIPS)</b> из этого журнала оценивает ценность ДРУГИХ политик — не выкатывая их. Награды невыбранных действий не выдумываются; используется только перевзвешивание уже наблюдённого.</p>
+  <div class="row">
+    <button id="eval">Оценить политики</button>
+    <button id="chain" class="ghost">Проверить цепь</button>
+  </div>
+  <div class="cards" id="cards"></div>
+  <div class="rec" id="rec"></div>
+  <h2>Off-policy ценность политик (SNIPS)</h2>
+  <div id="bars"></div>
+  <div class="logged-line" id="logged"></div>
+  <h2>Детали</h2>
+  <table id="tbl"><thead><tr><th>Политика</th><th>SNIPS</th><th>IPS</th><th>uplift vs logged</th><th>ESS</th><th>overlap</th><th>надёжность</th></tr></thead><tbody></tbody></table>
+  <p class="hint" id="empty" style="margin-top:12px">Нажмите «Оценить политики» — нужны залогированные решения с исходами.</p>
+</main>
+<script>
+const $ = (s) => document.querySelector(s);
+function stat(v, l, cls) { return `<div class="stat"><b class="${cls||''}">${v}</b><span>${l}</span></div>`; }
+function render(c) {
+  $('#empty').style.display = 'none';
+  const maxV = Math.max(c.loggedValue, ...c.policies.map((p) => p.snips), 0.0001);
+  $('#cards').innerHTML =
+    stat(c.resolved, 'решений с исходом', '') +
+    stat(c.loggedValue, 'ценность текущей', '') +
+    stat(c.best || '—', 'лучшая политика', 'ok') +
+    stat('+' + c.regret, 'regret (упущено)', c.regret > 0 ? 'bad' : 'ok');
+  const rec = $('#rec'); rec.style.display = 'block'; rec.textContent = (c.advice ? `[LLM: ${c.advice.action}] ${c.advice.rationale}` : c.recommendation);
+  $('#bars').innerHTML = c.policies.map((p) => {
+    const w = Math.max(0, (p.snips / maxV) * 100);
+    return `<div class="bar ${p.name === c.best ? 'best' : ''}"><div class="name">${p.name}</div><div class="track"><div class="fill" style="width:${w}%"></div></div><div class="val">${p.snips}${p.confident ? '' : ' ⚠'}</div></div>`;
+  }).join('');
+  $('#logged').textContent = `— — — логирующая политика: ${c.loggedValue} (пунктир) — — —`;
+  $('#tbl tbody').innerHTML = c.policies.map((p) => `<tr><td><b>${p.name}</b></td><td>${p.snips}</td><td>${p.ips}</td><td style="color:${p.upliftVsLogged>0?'var(--ok)':'var(--dim)'}">${p.upliftVsLogged>0?'+':''}${p.upliftVsLogged}</td><td>${p.ess}</td><td>${p.overlap}</td><td><span class="pill ${p.confident?'ok':'bad'}">${p.confident?'надёжно':'мало данных'}</span></td></tr>`).join('');
+}
+$('#eval').onclick = async () => {
+  const btn = $('#eval'); btn.disabled = true; btn.textContent = 'Оцениваю…';
+  try { const c = await (await fetch('/api/evaluate', { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' })).json();
+    if (c.error) { $('#empty').textContent = 'Ошибка: ' + c.error; $('#empty').style.display=''; } else render(c);
+  } catch (e) { $('#empty').textContent = 'Ошибка сети: ' + e.message; }
+  btn.disabled = false; btn.textContent = 'Оценить политики';
+};
+$('#chain').onclick = async () => { const v = await (await fetch('/api/verify-chain')).json(); alert(v.ok ? `Цепь цела: ${v.length} событий (append-only)` : `Цепь нарушена на #${v.brokenAt}`); };
+</script>
+</body>
+</html>
