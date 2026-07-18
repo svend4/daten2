@@ -21,10 +21,43 @@ export default function OrderSuccessPage({ params }: PageProps) {
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [paying, setPaying] = useState(false);
+  const [payError, setPayError] = useState<string | null>(null);
 
   useEffect(() => {
     loadOrder();
   }, [params.id]);
+
+  const pay = async () => {
+    if (!order) return;
+    setPaying(true);
+    setPayError(null);
+    try {
+      // 1) намерение оплаты
+      const intentRes = await fetch('/api/payments/intent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderNumber: order.orderNumber }),
+      });
+      const intent = await intentRes.json();
+      if (!intent.success) throw new Error(intent.error || 'Ошибка платежа');
+
+      // 2) подтверждение (аналог confirm/webhook провайдера)
+      const confirmRes = await fetch('/api/payments/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderNumber: order.orderNumber, providerRef: intent.data.providerRef }),
+      });
+      const confirmed = await confirmRes.json();
+      if (!confirmed.success) throw new Error(confirmed.error || 'Платёж отклонён');
+
+      await loadOrder();
+    } catch (e) {
+      setPayError(e instanceof Error ? e.message : 'Ошибка оплаты');
+    } finally {
+      setPaying(false);
+    }
+  };
 
   const loadOrder = async () => {
     try {
@@ -78,6 +111,30 @@ export default function OrderSuccessPage({ params }: PageProps) {
           Номер заказа:{' '}
           <span className="font-bold text-pink-600">#{order.id}</span>
         </p>
+
+        {/* Оплата (пила коммерции L6) */}
+        <div className="mt-5">
+          {order.paymentStatus === 'PAID' ? (
+            <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-green-100 text-green-800 font-semibold">
+              <CheckCircle className="w-5 h-5" /> Оплачено
+            </span>
+          ) : order.paymentStatus === 'FAILED' ? (
+            <div className="space-y-2">
+              <span className="inline-block px-4 py-2 rounded-full bg-red-100 text-red-800 font-semibold">Платёж отклонён</span>
+              <div><Button onClick={pay} disabled={paying}>{paying ? 'Обработка…' : 'Повторить оплату'}</Button></div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <span className="inline-block px-3 py-1 rounded-full bg-yellow-100 text-yellow-800 text-sm font-medium">Ожидает оплаты</span>
+              <div>
+                <Button onClick={pay} disabled={paying}>
+                  {paying ? 'Обработка…' : `Оплатить ${formatPrice(order.totalAmount)}`}
+                </Button>
+              </div>
+            </div>
+          )}
+          {payError && <p className="text-red-600 mt-2">{payError}</p>}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">

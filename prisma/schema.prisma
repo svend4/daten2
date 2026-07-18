@@ -88,11 +88,36 @@ model Order {
   customer        Customer             @relation(fields: [customerId], references: [id])
   items           OrderItem[]
   statusHistory   OrderStatusHistory[]
+  payments        Payment[]
 
   @@index([customerId])
   @@index([status])
   @@index([createdAt])
   @@map("orders")
+}
+
+// Платёж (пила коммерции L6). Провайдер подключаемый (mock/stripe).
+model Payment {
+  id          Int           @id @default(autoincrement())
+  orderId     Int           @map("order_id")
+  provider    String        @default("mock")
+  providerRef String        @unique @map("provider_ref")
+  amount      Decimal       @db.Decimal(10, 2)
+  currency    String        @default("EUR")
+  status      PaymentState  @default(REQUIRES_CONFIRMATION)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  order       Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("payments")
+}
+
+enum PaymentState {
+  REQUIRES_CONFIRMATION
+  SUCCEEDED
+  FAILED
 }
 
 enum OrderStatus {
