@@ -312,6 +312,20 @@ services:
     ports: ["8102:8102"]
     depends_on: ["storefront"]
 
+  rosetta:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/rosetta-GBpVR
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ROSETTA_BACKENDS: >-
+        [{"name":"level1-php","url":"http://level1:80"},
+         {"name":"level2-flask","url":"http://level2:10000"},
+         {"name":"level3-django","url":"http://level3:10000"},
+         {"name":"level4-express","url":"http://level4:10000"},
+         {"name":"level5-react-flask","url":"http://level5:10000"}]
+    ports: ["8103:8103"]
+    depends_on: ["level1", "level2", "level3", "level4", "level5"]
+
   green-router:
     build:
       context: ${REPO:-https://github.com/svend4/daten2.git}#claude/green-router-GBpVR
