@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Магазин цветов — событийная шина</title>
+<style>
+  :root{
+    --bg:#f4f6fb; --surface:#fff; --border:#e2e6f0; --ink:#1a2030; --soft:#556; --faint:#8791a4;
+    --accent:#3556c8; --accent-soft:#e2e7fb; --ok:#1f7a4d; --code:#12151f; --codeink:#cfe0ff;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; --mono:ui-monospace,monospace;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --bg:#0f1320; --surface:#171c2b; --border:#272f45; --ink:#e6eaf5; --soft:#a6afc6; --faint:#767f98;
+    --accent:#8a9cf0; --accent-soft:#1b2238; --ok:#5cc98c; --code:#0b0e18; --codeink:#bcd0ff;
+  }}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);min-height:100vh}
+  header{padding:16px 22px;border-bottom:1px solid var(--border);background:var(--surface);display:flex;align-items:center;gap:10px}
+  header h1{font-size:18px;margin:0}
+  header .badge{font-size:11px;color:var(--faint);margin-left:auto;font-family:var(--mono)}
+  main{max-width:920px;margin:0 auto;padding:20px;display:grid;gap:16px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px}
+  .card h2{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--soft)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  button{padding:9px 14px;border:none;border-radius:10px;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;font-size:14px}
+  button.ghost{background:var(--accent-soft);color:var(--accent)}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+  .kpi{background:var(--accent-soft);border-radius:10px;padding:11px}
+  .kpi .v{font-size:20px;font-weight:700;font-family:var(--mono)}
+  .kpi .l{font-size:12px;color:var(--soft)}
+  .types{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .type{font-size:12px;padding:3px 10px;border-radius:20px;background:var(--accent-soft);color:var(--accent);font-family:var(--mono)}
+  #stream{background:var(--code);color:var(--codeink);border-radius:10px;padding:12px;font-family:var(--mono);font-size:12px;line-height:1.5;max-height:280px;overflow:auto}
+  .ev{opacity:0;animation:fade .4s forwards}
+  @keyframes fade{to{opacity:1}}
+  .muted{color:var(--faint);font-size:13px}
+</style>
+</head>
+<body>
+  <header>
+    <span style="font-size:22px">📡</span>
+    <h1>Событийная шина · event sourcing</h1>
+    <span class="badge" id="engine"></span>
+  </header>
+  <main>
+    <div class="card">
+      <h2>Проекции (свёртка событий)</h2>
+      <div class="kpis" id="kpis"></div>
+      <div class="types" id="types"></div>
+      <div class="row" style="margin-top:12px">
+        <button onclick="snapshot()">📸 Снимок каталога → события</button>
+        <button class="ghost" onclick="rebuild()">Пересобрать проекции</button>
+        <button class="ghost" onclick="demo()">Опубликовать заказ</button>
+        <span class="muted" id="meta"></span>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Единый поток (SSE) — то, что видят аналитика и ИИ</h2>
+      <div id="stream" class="muted">подключаюсь…</div>
+    </div>
+  </main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+async function refresh(){
+  const p = await (await fetch('/api/projections')).json();
+  $('kpis').innerHTML = [
+    ['Событий', p.eventCount],['Заказов', p.orders.count],['Выручка', p.orders.revenue+' €'],
+    ['Смен цен', p.priceHistory.length],['seq', p.lastSeq],
+  ].map(([l,v])=>`<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
+  $('types').innerHTML = Object.entries(p.byType).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<span class="type">${k} · ${v}</span>`).join('');
+}
+async function snapshot(){ const d=await (await fetch('/api/snapshot',{method:'POST'})).json(); $('meta').textContent = d.error?d.error:`деривировано ${d.derived} событий`; refresh(); }
+async function rebuild(){ await fetch('/api/rebuild',{method:'POST'}); $('meta').textContent='проекции пересобраны из журнала'; refresh(); }
+async function demo(){ await fetch('/api/events',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'OrderPlaced',payload:{order_number:'ORD-'+Math.floor(Math.random()*9000+1000),total:+(Math.random()*8+1).toFixed(2)},source:'dashboard'})}); refresh(); }
+
+function connect(){
+  const es = new EventSource('/api/stream');
+  $('stream').textContent='';
+  es.onmessage = () => {};
+  ['OrderPlaced','OrderStatusChanged','StockChanged','PriceChanged','ProductAdded','ProductRemoved','ProductViewed'].forEach(t=>{
+    es.addEventListener(t, (m)=>{ const e=JSON.parse(m.data); const div=document.createElement('div'); div.className='ev';
+      div.textContent=`#${e.seq} [${e.type}] ${JSON.stringify(e.payload)} · ${e.source}`; $('stream').prepend(div);
+      while($('stream').childNodes.length>60) $('stream').lastChild.remove(); refresh(); });
+  });
+  es.onerror = ()=>{ $('stream').insertAdjacentHTML('afterbegin','<div class="muted">поток разорван, переподключение…</div>'); };
+}
+fetch('/api/health').then(r=>r.json()).then(d=>{ $('engine').textContent=(d.engine==='llm'?'Claude':'rule-based')+' · '+d.backend; refresh(); connect(); });
+</script>
+</body>
+</html>

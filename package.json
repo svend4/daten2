@@ -1,0 +1,16 @@
+{
+  "name": "flower-shop-event-bus",
+  "version": "1.0.0",
+  "description": "Событийная шина (event sourcing): единый append-only поток доменных событий от уровней и сервисов, проекции-read-models с rebuild и SSE-стрим для аналитики и ИИ",
+  "private": true,
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.mjs"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "@anthropic-ai/sdk": "^0.65.0"
+  }
+}
