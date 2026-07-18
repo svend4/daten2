@@ -68,6 +68,7 @@ MCP-адаптер. `docker-compose.yml` сводит всё в один жив�
 | **Семантический поиск** | Поиск по смысловым осям + рекомендации («похожие») | 8072 | 16/16 | `claude/ai-search-GBpVR` |
 | **Наблюдаемость** | Бенчмарк 7 стеков (p50/p95/p99, rps, надёжность) + метрики Prometheus | 8074 | 19/19 | `claude/observability-GBpVR` |
 | **Цифровой двойник** | Синтетические покупатели генерируют спрос (симуляция, what-if по ценам, живой трафик) | 8075 | 16/16 | `claude/digital-twin-GBpVR` |
+| **Файрвол ИИ-агента** | Защита от prompt-injection и злоупотребления инструментами между вводом покупателя и `create_order` | 8076 | 18/18 | `claude/agent-firewall-GBpVR` |
 | **Капабилити-роутер + общие сервисы** | Статичный роутер по политике + **auth** и **payment** (один раз для всех) | 8081/8091/8092 | 22/22 | `claude/gateway-router-GBpVR` |
 | **MCP-сервер** | Адаптер Model Context Protocol — любой ИИ управляет магазином (4 инструмента, stdio) | — | ✓ | `claude/mcp-server-GBpVR` |
 
@@ -125,6 +126,7 @@ docker compose --profile full --profile enterprise --profile commerce up --build
 | http://localhost:8072 | Семантический поиск |
 | http://localhost:8074 | Наблюдаемость · бенчмарк 7 стеков (+ `/metrics`) |
 | http://localhost:8075 | Цифровой двойник · симуляция спроса и what-if |
+| http://localhost:8076 | Файрвол ИИ-агента · песочница атак + защищённое оформление |
 | http://localhost:8081…8087 | Уровни L1…L7 напрямую (для отладки) |
 | http://localhost:8091 / 8092 | auth / payment (профиль commerce) |
 
@@ -132,7 +134,7 @@ docker compose --profile full --profile enterprise --profile commerce up --build
 
 | Профиль | Добавляет |
 |---------|-----------|
-| *(по умолчанию)* | L1–L5, роутер, витрина, управляющий, поиск, наблюдаемость, двойник |
+| *(по умолчанию)* | L1–L5, роутер, витрина, управляющий, поиск, наблюдаемость, двойник, файрвол |
 | `full` | L6 (`l6-db` PostgreSQL, `l6-seed` разовый сид, `level6`) |
 | `enterprise` | L7 (`l7-postgres`, `l7-rabbitmq`, `product-service`, `order-service`, `notification-service`, `level7` nginx) |
 | `commerce` | `auth`, `payment` |
@@ -150,11 +152,11 @@ offline и маршрутизирует в остальные — это и де
 
 - **Каждый компонент** — собственный smoke-тест (реальный HTTP через границы
   процессов): роутер 12/12, витрина 19/19, управляющий 19/19, поиск 16/16,
-  наблюдаемость 19/19, двойник 16/16, контракт (gateway) 22/22, MCP — реальный stdio JSON-RPC.
+  наблюдаемость 19/19, двойник 16/16, файрвол 18/18, контракт (gateway) 22/22, MCP — реальный stdio JSON-RPC.
 - **Оркестрация** — живой прогон в контейнерах подтвердил сквозной путь
   **витрина → роутер → живой уровень** (диалоговый заказ приземляется на уровень) и
   **failover на лету** (остановка выбранного уровня → трафик уходит на следующий).
-- **Compose** — `docker compose config` валиден для всех профилей (22 сервиса); CI
+- **Compose** — `docker compose config` валиден для всех профилей (23 сервиса); CI
   проверяет это на каждом пуше.
 
 > Примечание: полная сборка образов **языковых** уровней в песочнице-CI невозможна
@@ -180,6 +182,7 @@ offline и маршрутизирует в остальные — это и де
 | `claude/ai-search-GBpVR` | Семантический поиск и рекомендации |
 | `claude/observability-GBpVR` | Наблюдаемость + бенчмарк 7 стеков (Prometheus) |
 | `claude/digital-twin-GBpVR` | Цифровой двойник: синтетические покупатели (симуляция/what-if/живой трафик) |
+| `claude/agent-firewall-GBpVR` | Файрвол ИИ-агента: защита от prompt-injection и злоупотребления инструментами |
 | `claude/gateway-router-GBpVR` | Капабилити-роутер + общие auth/payment |
 | `claude/mcp-server-GBpVR` | MCP-адаптер (ИИ управляет магазином) |
 | `claude/flower-shop-seven-levels-GBpVR` | **Этот стенд**: исходники 7 уровней + `docker-compose.yml` + обзор |

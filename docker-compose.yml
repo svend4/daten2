@@ -240,6 +240,15 @@ services:
     ports: ["8075:8075"]
     depends_on: ["router"]
 
+  firewall:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/agent-firewall-GBpVR
+    environment:
+      BACKEND_URL: http://router:8073
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8076:8076"]
+    depends_on: ["router"]
+
   # ======================= ОБЩИЕ СЕРВИСЫ (профиль commerce) =======================
   auth:
     build:
