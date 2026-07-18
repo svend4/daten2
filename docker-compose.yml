@@ -349,6 +349,15 @@ services:
     ports: ["8096:8096"]
     depends_on: ["level1", "level2", "level4", "level5"]
 
+  event-bus:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/event-bus-GBpVR
+    environment:
+      BACKEND_URL: http://router:8073
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8097:8097"]
+    depends_on: ["router"]
+
   # ======================= ОБЩИЕ СЕРВИСЫ (профиль commerce) =======================
   auth:
     build:
