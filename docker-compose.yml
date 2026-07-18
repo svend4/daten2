@@ -336,6 +336,19 @@ services:
     ports: ["8095:8095"]
     depends_on: ["router"]
 
+  chaos-harness:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/chaos-harness-GBpVR
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      CHAOS_TARGETS: >-
+        [{"id":"level1","name":"PHP (L1)","url":"http://level1:80"},
+         {"id":"level2","name":"Flask (L2)","url":"http://level2:10000"},
+         {"id":"level4","name":"Express (L4)","url":"http://level4:10000"},
+         {"id":"level5","name":"React+API (L5)","url":"http://level5:10000"}]
+    ports: ["8096:8096"]
+    depends_on: ["level1", "level2", "level4", "level5"]
+
   # ======================= ОБЩИЕ СЕРВИСЫ (профиль commerce) =======================
   auth:
     build:
