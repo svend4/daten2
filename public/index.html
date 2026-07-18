@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Магазин цветов — наблюдаемость и бенчмарк 7 стеков</title>
+<style>
+  :root{
+    --bg:#f5f7f6; --surface:#ffffff; --border:#e3e8e6; --ink:#182220; --soft:#556; --faint:#8894a0;
+    --accent:#0d7a63; --accent-soft:#dcefe9; --good:#1f7a4d; --warn:#b3771e; --bad:#b32424; --bot:#eef2f1;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; --mono:ui-monospace,monospace;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --bg:#0f1513; --surface:#161d1b; --border:#26302d; --ink:#e6eeeb; --soft:#a6b2ad; --faint:#74827c;
+    --accent:#4fc0a3; --accent-soft:#15251f; --good:#5cc98c; --warn:#e0af5a; --bad:#e57373; --bot:#1c2624;
+  }}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);min-height:100vh}
+  header{padding:16px 22px;border-bottom:1px solid var(--border);background:var(--surface);display:flex;align-items:center;gap:10px}
+  header h1{font-size:18px;margin:0}
+  header .badge{font-size:11px;color:var(--faint);margin-left:auto;font-family:var(--mono)}
+  main{max-width:980px;margin:0 auto;padding:20px;display:grid;gap:16px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  button{padding:9px 15px;border:none;border-radius:10px;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;font-size:14px}
+  button.ghost{background:var(--accent-soft);color:var(--accent)}
+  select,input{padding:8px 10px;border:1px solid var(--border);border-radius:9px;background:var(--bg);color:var(--ink);font-size:14px}
+  label{font-size:13px;color:var(--soft);display:flex;gap:6px;align-items:center}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px}
+  .card h2{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--soft)}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--border)}
+  th{color:var(--soft);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.03em}
+  .num{font-family:var(--mono)}
+  tr.best{background:var(--accent-soft)}
+  .bar{height:7px;border-radius:4px;background:var(--accent-soft);width:120px;overflow:hidden;display:inline-block;vertical-align:middle}
+  .bar>i{display:block;height:100%;background:var(--accent)}
+  .bar.tp>i{background:var(--good)}
+  .pill{font-size:11px;padding:2px 8px;border-radius:20px;font-weight:600}
+  .up{color:var(--good)} .down{color:var(--bad)}
+  .muted{color:var(--faint)}
+  .chat{display:flex;flex-direction:column;gap:10px}
+  #log{max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
+  .msg{max-width:88%;padding:9px 13px;border-radius:12px;white-space:pre-wrap;line-height:1.45;font-size:14px}
+  .msg.user{align-self:flex-end;background:var(--accent);color:#fff}
+  .msg.bot{align-self:flex-start;background:var(--bot)}
+  .chips{display:flex;gap:8px;flex-wrap:wrap}
+  .chip{font-size:13px;padding:6px 11px;border-radius:20px;background:var(--accent-soft);color:var(--accent);border:none;cursor:pointer;font-weight:500}
+  form{display:flex;gap:8px}
+  a{color:var(--accent)}
+</style>
+</head>
+<body>
+  <header>
+    <span style="font-size:22px">📈</span>
+    <h1>Наблюдаемость · бенчмарк 7 стеков</h1>
+    <span class="badge" id="engine"></span>
+  </header>
+  <main>
+    <div class="card">
+      <h2>Прогон</h2>
+      <div class="row">
+        <label>Эндпоинт
+          <select id="path"><option>/api/products</option><option>/api/health</option></select>
+        </label>
+        <label>Запросов <input id="requests" class="num" type="number" value="100" min="1" max="2000" style="width:80px"></label>
+        <label>Параллелизм <input id="concurrency" class="num" type="number" value="10" min="1" max="100" style="width:64px"></label>
+        <button onclick="run()">▶ Прогнать бенчмарк</button>
+        <a href="/metrics" target="_blank">/metrics</a>
+        <span class="muted" id="meta"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Сравнение стеков</h2>
+      <table><thead><tr>
+        <th>#</th><th>Стек</th><th>p50</th><th>p95</th><th>p99</th><th>Латентность (p95)</th><th>Throughput</th><th>Success</th>
+      </tr></thead><tbody id="rows"><tr><td colspan="8" class="muted">Запустите бенчмарк</td></tr></tbody></table>
+    </div>
+
+    <div class="card chat">
+      <h2>Спросить аналитика</h2>
+      <div id="log"></div>
+      <div class="chips">
+        <button class="chip" onclick="quick('Какой стек самый быстрый?')">Самый быстрый</button>
+        <button class="chip" onclick="quick('Сравни все стеки')">Сравнить</button>
+        <button class="chip" onclick="quick('Есть проблемные стеки?')">Проблемы</button>
+        <button class="chip" onclick="quick('Сравни пропускную способность')">Throughput</button>
+      </div>
+      <form id="f"><input id="m" placeholder="Спросите про латентность, throughput, надёжность…" autocomplete="off" style="flex:1"><button type="submit">➤</button></form>
+    </div>
+  </main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const sid = 'obs-' + Math.random().toString(36).slice(2);
+const ms = (n) => n==null ? '—' : n+' мс';
+
+function draw(data){
+  const order = data.ranked || data.results.map(r=>r.id);
+  const rows = order.map(id => data.results.find(r=>r.id===id));
+  const alive = rows.filter(r=>r.alive);
+  const maxP95 = Math.max(1, ...alive.map(r=>r.latency_ms.p95||0));
+  const maxTp = Math.max(1, ...alive.map(r=>r.throughput_rps||0));
+  $('rows').innerHTML = rows.map((r,i)=>{
+    if(!r.alive) return `<tr><td>—</td><td>${r.name} <span class="pill down">offline</span></td><td colspan="6" class="muted">не ответил</td></tr>`;
+    const rel = Math.round(r.success_ratio*100);
+    return `<tr class="${i===0?'best':''}">
+      <td class="num">${i+1}</td>
+      <td>${r.name}${i===0?' ⚡':''}</td>
+      <td class="num">${ms(r.latency_ms.p50)}</td>
+      <td class="num">${ms(r.latency_ms.p95)}</td>
+      <td class="num">${ms(r.latency_ms.p99)}</td>
+      <td><span class="bar"><i style="width:${Math.round((r.latency_ms.p95/maxP95)*100)}%"></i></span></td>
+      <td class="num">${r.throughput_rps} rps <span class="bar tp"><i style="width:${Math.round((r.throughput_rps/maxTp)*100)}%"></i></span></td>
+      <td class="num ${rel<100?'down':'up'}">${rel}%</td></tr>`;
+  }).join('');
+}
+
+async function run(){
+  $('meta').textContent = 'нагружаю стеки…';
+  const body = { path:$('path').value, requests:+$('requests').value, concurrency:+$('concurrency').value };
+  try{
+    const d = await (await fetch('/api/bench',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})).json();
+    if(d.error){ $('meta').textContent='ошибка: '+d.error; return; }
+    draw(d); $('meta').textContent = `${d.opts.requests}×${d.opts.concurrency} по ${d.opts.path} · ${new Date(d.at).toLocaleTimeString()}`;
+  }catch(e){ $('meta').textContent='ошибка сети'; }
+}
+
+function add(role,text){ const el=document.createElement('div'); el.className='msg '+role; el.textContent=text; $('log').appendChild(el); $('log').scrollTop=$('log').scrollHeight; return el; }
+async function ask(text){
+  add('user',text); const t=add('bot','…');
+  try{ const d=await (await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:sid,message:text})})).json();
+    t.textContent = d.reply || d.error || '(нет ответа)'; }
+  catch(e){ t.textContent='Ошибка сети'; }
+}
+function quick(t){ ask(t); }
+$('f').addEventListener('submit',(e)=>{ e.preventDefault(); const v=$('m').value.trim(); if(!v)return; $('m').value=''; ask(v); });
+
+fetch('/api/health').then(r=>r.json()).then(d=>{ $('engine').textContent=(d.engine==='llm'?'Claude API':'rule-based')+' · '+d.levels+' стеков'; });
+fetch('/api/results').then(r=>r.ok?r.json():null).then(d=>{ if(d) draw(d); });
+</script>
+</body>
+</html>

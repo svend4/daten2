@@ -1,0 +1,16 @@
+{
+  "name": "flower-shop-observability",
+  "version": "1.0.0",
+  "description": "Слой наблюдаемости: бенчмарк семи стеков через единый контракт (латентность p50/p95/p99, пропускная способность, надёжность), метрики Prometheus и дашборд сравнения",
+  "private": true,
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.mjs"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "@anthropic-ai/sdk": "^0.65.0"
+  }
+}
