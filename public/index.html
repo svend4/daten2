@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Магазин цветов — property-тесты</title>
+<style>
+  :root{
+    --bg:#f6f5f9; --surface:#fff; --border:#e5e2ee; --ink:#211f2a; --soft:#556; --faint:#867e97;
+    --accent:#7b3fb0; --accent-soft:#eee3f7; --ok:#1f7a4d; --bad:#b32424; --code:#12111c; --codeink:#e0d4f5;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; --mono:ui-monospace,monospace;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --bg:#12111a; --surface:#1a1824; --border:#2c2838; --ink:#ece7f3; --soft:#a99fb5; --faint:#7d7391;
+    --accent:#b98ce6; --accent-soft:#251c33; --ok:#5cc98c; --bad:#e57373; --code:#0c0b14; --codeink:#d8caf0;
+  }}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);min-height:100vh}
+  header{padding:16px 22px;border-bottom:1px solid var(--border);background:var(--surface);display:flex;align-items:center;gap:10px}
+  header h1{font-size:18px;margin:0}
+  header .badge{font-size:11px;color:var(--faint);margin-left:auto;font-family:var(--mono)}
+  main{max-width:860px;margin:0 auto;padding:20px;display:grid;gap:16px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px}
+  .card h2{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--soft)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  input{padding:8px 10px;border:1px solid var(--border);border-radius:9px;background:var(--bg);color:var(--ink);font-size:14px}
+  input.t{flex:1;min-width:180px;font-family:var(--mono);font-size:13px}
+  button{padding:9px 15px;border:none;border-radius:10px;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;font-size:14px}
+  .summary{font-size:16px;font-weight:700;margin:6px 0}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  td,th{text-align:left;padding:8px;border-bottom:1px solid var(--border);vertical-align:top}
+  th{color:var(--soft);font-size:12px;text-transform:uppercase}
+  .pill{font-size:12px;font-weight:700;padding:2px 9px;border-radius:20px}
+  .p-ok{background:var(--accent-soft);color:var(--ok)} .p-bad{background:#f6dede;color:var(--bad)}
+  @media (prefers-color-scheme:dark){.p-bad{background:#2a1414}}
+  .cx{background:var(--code);color:var(--codeink);border-radius:8px;padding:8px;font-family:var(--mono);font-size:12px;margin-top:6px;white-space:pre-wrap}
+  .muted{color:var(--faint);font-size:13px}
+</style>
+</head>
+<body>
+  <header>
+    <span style="font-size:22px">🔬</span>
+    <h1>Property-based инварианты контракта</h1>
+    <span class="badge" id="engine"></span>
+  </header>
+  <main>
+    <div class="card">
+      <h2>Прогон свойств против цели</h2>
+      <div class="row">
+        <input class="t" id="target" placeholder="http://localhost:8080">
+        <span class="muted">входов<input id="iters" type="number" value="40" style="width:70px"></span>
+        <span class="muted">seed<input id="seed" type="number" value="1" style="width:60px"></span>
+        <button onclick="run()">Проверить инварианты</button>
+      </div>
+      <div class="summary" id="summary"></div>
+      <table><thead><tr><th>Свойство</th><th>Входов</th><th>Итог</th><th>Контрпример (сжат)</th></tr></thead><tbody id="rows"><tr><td colspan="4" class="muted">Запустите прогон</td></tr></tbody></table>
+    </div>
+  </main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+async function run(){
+  $('summary').textContent='гоняю свойства…'; $('rows').innerHTML='';
+  const body = { target: $('target').value || undefined, iterations: +$('iters').value, seed: +$('seed').value };
+  const d = await (await fetch('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})).json();
+  if(d.error){ $('summary').textContent=d.error; return; }
+  $('summary').innerHTML = `<span style="color:${d.allHold?'var(--ok)':'var(--bad)'}">${d.allHold?'✓ инварианты держатся':'✗ есть нарушения'}</span> — ${d.held}/${d.total} на ${d.iterations} входах · ${d.target}`;
+  $('rows').innerHTML = d.results.map(r=>`<tr>
+    <td>${r.name}</td><td class="mono">${r.tested}</td>
+    <td><span class="pill ${r.ok?'p-ok':'p-bad'}">${r.ok?'HOLDS':'FAIL'}</span></td>
+    <td>${r.ok?'':`<div class="muted">${r.detail}</div><div class="cx">${JSON.stringify(r.counterexample)}\nсжат за ${r.shrinkSteps} шагов</div>`}</td></tr>`).join('');
+}
+fetch('/api/health').then(r=>r.json()).then(d=>{ $('target').value=d.target; $('engine').textContent=(d.engine==='llm'?'Claude':'rule-based')+' · '+d.properties+' свойств'; });
+</script>
+</body>
+</html>

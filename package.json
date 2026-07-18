@@ -1,0 +1,16 @@
+{
+  "name": "flower-shop-property-tests",
+  "version": "1.0.0",
+  "description": "Property-based тестирование инвариантов контракта: генерация случайных валидных входов, проверка свойств (total=Σ line_total, приватность токена, идемпотентность) против любого уровня со сжатием контрпримера",
+  "private": true,
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.mjs"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "@anthropic-ai/sdk": "^0.65.0"
+  }
+}
