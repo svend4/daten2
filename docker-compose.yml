@@ -214,6 +214,23 @@ services:
     ports: ["8072:8072"]
     depends_on: ["router"]
 
+  observability:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/observability-GBpVR
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ROUTER_URL: http://router:8073
+      OBS_LEVELS: >-
+        [{"id":"level1","name":"PHP","url":"http://level1:80"},
+         {"id":"level2","name":"Flask","url":"http://level2:10000"},
+         {"id":"level3","name":"Django","url":"http://level3:10000"},
+         {"id":"level4","name":"Express","url":"http://level4:10000"},
+         {"id":"level5","name":"React+Flask","url":"http://level5:10000"},
+         {"id":"level6","name":"Next.js","url":"http://level6:10000"},
+         {"id":"level7","name":"Microservices","url":"http://level7:80"}]
+    ports: ["8074:8074"]
+    depends_on: ["router"]
+
   # ======================= ОБЩИЕ СЕРВИСЫ (профиль commerce) =======================
   auth:
     build:
