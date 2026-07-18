@@ -54,3 +54,16 @@ jobs:
           assert c.get(f'/api/orders/{tok}').json()['order']['payment_status'] == 'pending', 'api get order'
           print('Каталог + богатая схема + единый API OK ✓')
           PY
+
+      - name: Admin (ensure_admin + login)
+        run: |
+          ADMIN_USERNAME=admin ADMIN_PASSWORD=ci-admin-pass python manage.py ensure_admin
+          python - <<'PY2'
+          import django; django.setup()
+          from django.test import Client
+          c = Client()
+          assert c.login(username='admin', password='ci-admin-pass'), 'admin login'
+          assert c.get('/admin/shop/order/').status_code == 200, 'admin orders'
+          assert c.get('/admin/shop/product/').status_code == 200, 'admin products'
+          print('Админка OK ✓')
+          PY2

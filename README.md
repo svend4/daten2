@@ -34,3 +34,13 @@ python manage.py runserver
 - Сайт: http://127.0.0.1:8000  
 - Админка: http://127.0.0.1:8000/admin/  
 Добавьте категории и товары в админке — они появятся на главной.
+
+## Админка (коммерция: управление)
+Богатая Django-админка на `/admin/` — управление товарами, категориями,
+заказами (со статусами и позициями), клиентами.
+
+Создание администратора (идемпотентно, из окружения; без `ADMIN_PASSWORD` не создаётся):
+```bash
+ADMIN_USERNAME=admin ADMIN_PASSWORD=<strong> ADMIN_EMAIL=a@b.c python manage.py ensure_admin
+```
+В Docker выполняется автоматически при старте (`docker-entrypoint.sh`), если задан `ADMIN_PASSWORD`.

@@ -10,10 +10,11 @@ RUN pip install --no-cache-dir -r requirements.txt gunicorn
 # Copy application
 COPY . .
 
-# Collect static files and migrate
+# Статику собираем на этапе сборки (не нужен runtime-env)
 RUN python manage.py collectstatic --noinput || true
-RUN python manage.py migrate --noinput || true
+RUN chmod +x docker-entrypoint.sh
 
 EXPOSE 10000
 
-CMD ["gunicorn", "--bind", "0.0.0.0:10000", "flower_shop.wsgi:application"]
+# Миграции + администратор (из ADMIN_*) выполняются при старте, когда доступен runtime-env
+CMD ["./docker-entrypoint.sh"]
