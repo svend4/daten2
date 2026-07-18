@@ -376,6 +376,20 @@ services:
     ports: ["8099:8099"]
     depends_on: ["router"]
 
+  polyglot-benchmark:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/polyglot-benchmark-GBpVR
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      BENCH_STACKS: >-
+        [{"id":"level1","name":"L1 · PHP","language":"PHP 8.2","storage":"SQLite","watts":12,"url":"http://level1:80"},
+         {"id":"level2","name":"L2 · Flask","language":"Python 3.12","storage":"SQLite","watts":18,"url":"http://level2:10000"},
+         {"id":"level3","name":"L3 · Django","language":"Python 3.12","storage":"SQLite","watts":20,"url":"http://level3:10000"},
+         {"id":"level4","name":"L4 · Express","language":"Node.js 20","storage":"SQLite","watts":16,"url":"http://level4:10000"},
+         {"id":"level5","name":"L5 · React+API","language":"Python + JS","storage":"SQLite","watts":22,"url":"http://level5:10000"}]
+    ports: ["8100:8100"]
+    depends_on: ["level1", "level2", "level3", "level4", "level5"]
+
   # ======================= ОБЩИЕ СЕРВИСЫ (профиль commerce) =======================
   auth:
     build:
