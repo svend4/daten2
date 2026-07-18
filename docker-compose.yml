@@ -363,6 +363,13 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     ports: ["8108:8108"]
 
+  distill-deploy:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/distill-deploy-GBpVR
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8109:8109"]
+
   green-router:
     build:
       context: ${REPO:-https://github.com/svend4/daten2.git}#claude/green-router-GBpVR
