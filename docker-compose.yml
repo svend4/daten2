@@ -326,6 +326,13 @@ services:
     ports: ["8103:8103"]
     depends_on: ["level1", "level2", "level3", "level4", "level5"]
 
+  ops-ledger:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/ops-ledger-GBpVR
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8104:8104"]
+
   green-router:
     build:
       context: ${REPO:-https://github.com/svend4/daten2.git}#claude/green-router-GBpVR
