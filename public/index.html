@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Carbon arbitrage · углеродно-осознанное планирование</title>
+<style>
+  :root { --bg:#0b100d; --card:#131a15; --line:#20301f; --ink:#e6f2e6; --dim:#8fa88f; --ok:#5fcf6f; --bad:#e5544b; --acc:#7ee27e; --price:#f0c264; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.5 system-ui,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+  header { padding:22px 26px; border-bottom:1px solid var(--line); }
+  h1 { margin:0; font-size:19px; } h1 small { color:var(--dim); font-weight:400; font-size:13px; }
+  main { max-width:1000px; margin:0 auto; padding:22px 26px 60px; }
+  .cards { display:flex; gap:12px; flex-wrap:wrap; margin:6px 0 20px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 16px; min-width:120px; }
+  .stat b { font-size:24px; display:block; } .stat span { color:var(--dim); font-size:12px; }
+  h2 { font-size:14px; text-transform:uppercase; letter-spacing:.04em; color:var(--dim); margin:22px 0 10px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px; }
+  label { font-size:13px; color:var(--dim); }
+  input[type=range] { vertical-align:middle; }
+  button { background:var(--acc); color:#06140a; border:0; padding:9px 16px; border-radius:8px; font:inherit; font-weight:600; cursor:pointer; }
+  .heat { overflow-x:auto; } table { border-collapse:collapse; font-size:12.5px; }
+  th,td { border:1px solid var(--line); padding:4px 7px; text-align:center; } th { color:var(--dim); font-weight:600; }
+  td.r { text-align:left; color:var(--dim); white-space:nowrap; }
+  .job { display:inline-block; margin-left:4px; padding:0 4px; border-radius:4px; background:var(--acc); color:#06140a; font-weight:700; font-size:11px; }
+  .assign { width:100%; border-collapse:collapse; } .assign td,.assign th { border-bottom:1px solid var(--line); border-left:0; border-right:0; border-top:0; text-align:left; padding:7px 10px; }
+  .badge { font-size:12px; padding:1px 7px; border-radius:20px; } .badge.shift { background:rgba(126,226,126,.18); color:var(--acc); } .badge.stay { background:rgba(143,168,143,.15); color:var(--dim); }
+  .hint { color:var(--dim); font-size:13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Carbon arbitrage <small>— углеродно-осознанное планирование отложимых ИИ-нагрузок во времени и регионах</small></h1>
+</header>
+<main>
+  <p class="hint">Green-роутер выбирает уровень «сейчас». Carbon arbitrage идёт дальше: <b>сдвигает</b> отложимую работу в самые зелёные/дешёвые окна сети (по времени) и регионы (по пространству) с учётом дедлайнов и ёмкости — и считает выигрыш CO₂/€ против наивного «всё сейчас, дома».</p>
+  <div class="row">
+    <label>цель: цена <input id="w" type="range" min="0" max="100" value="100"> CO₂</label>
+    <label>ёмкость ячейки: <input id="cap" type="number" value="20" style="width:70px; background:#0a0f0c; border:1px solid var(--line); color:var(--ink); border-radius:6px; padding:4px 6px"> кВт·ч</label>
+    <button id="run">Спланировать</button>
+  </div>
+  <div class="cards" id="cards"></div>
+  <h2>Прогноз сети (гCO₂/кВт·ч) и размещение</h2>
+  <div class="heat"><table id="heat"></table></div>
+  <h2>Размещение нагрузок</h2>
+  <table class="assign" id="assign"><thead><tr><th>Работа</th><th>кВт·ч</th><th>дедлайн</th><th>→ регион/слот</th><th>CO₂ было→стало</th><th></th></tr></thead><tbody></tbody></table>
+  <p class="hint" id="empty">Нажмите «Спланировать».</p>
+</main>
+<script>
+const $ = (s) => document.querySelector(s);
+const JOBS = [
+  { id: 'batch-embed', energy: 30, deadline: 10, deferrable: true, regions: ['eu-north','eu-west','us-east'] },
+  { id: 'nightly-distill', energy: 25, deadline: 11, deferrable: true, regions: ['eu-north','eu-west'] },
+  { id: 'report-gen', energy: 12, deadline: 4, deferrable: true, regions: ['eu-west','eu-north'] },
+  { id: 'live-checkout', energy: 8, deadline: 0, deferrable: false, regions: ['eu-west'] },
+  { id: 'reindex', energy: 20, deadline: 8, deferrable: true, regions: ['eu-north','us-east'] },
+];
+let grid = null;
+function heatColor(c, lo, hi) { const t = (c - lo) / (hi - lo || 1); const g = Math.round(200 - t * 150), r = Math.round(40 + t * 180); return `rgb(${r},${g},50)`; }
+async function loadGrid() { grid = await (await fetch('/api/grid')).json(); }
+function render(p) {
+  $('#empty').style.display = 'none';
+  const s = p.savings;
+  $('#cards').innerHTML =
+    `<div class="stat"><b style="color:var(--ok)">${s.carbonPct}%</b><span>экономия CO₂ (${s.carbon} г)</span></div>` +
+    `<div class="stat"><b style="color:var(--price)">${s.costPct}%</b><span>экономия € (${s.cost})</span></div>` +
+    `<div class="stat"><b>${p.shifted}/${p.jobs}</b><span>нагрузок сдвинуто</span></div>` +
+    `<div class="stat"><b class="${p.invariants&&p.invariants.ok?'':'bad'}">${p.invariants&&p.invariants.ok?'✓':'⚠'}</b><span>план корректен</span></div>`;
+  // тепловая карта + размещённые работы
+  let lo = Infinity, hi = -Infinity;
+  for (const r of grid.regions) for (const c of r.slots) { lo = Math.min(lo, c.carbon); hi = Math.max(hi, c.carbon); }
+  const placed = {}; for (const a of p.assignments) { const k = a.region + ':' + a.slot; (placed[k] = placed[k] || []).push(a.id); }
+  let html = '<tr><th>регион \\ слот</th>' + grid.regions[0].slots.map((c) => `<th>${c.slot}</th>`).join('') + '</tr>';
+  for (const r of grid.regions) {
+    html += `<tr><td class="r">${r.id}</td>` + r.slots.map((c) => {
+      const k = r.id + ':' + c.slot; const jobs = (placed[k] || []).map((id) => `<span class="job">${id.slice(0,6)}</span>`).join('');
+      return `<td style="background:${heatColor(c.carbon, lo, hi)}22">${c.carbon}${jobs}</td>`;
+    }).join('') + '</tr>';
+  }
+  $('#heat').innerHTML = html;
+  $('#assign tbody').innerHTML = p.assignments.map((a) => `<tr><td><b>${a.id}</b></td><td>${a.energy}</td><td>${a.deadline}</td><td>${a.region} / слот ${a.slot}</td><td>${a.naiveCarbon} → ${a.carbon} г</td><td><span class="badge ${a.shifted?'shift':'stay'}">${a.shifted?'сдвинута':'сейчас'}</span></td></tr>`).join('');
+}
+$('#run').onclick = async () => {
+  const p = await (await fetch('/api/schedule', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ jobs: JOBS, weightCarbon: $('#w').value/100, capacityPerCell: Number($('#cap').value) }) })).json();
+  if (p.error) { $('#empty').textContent = 'Ошибка: ' + p.error; $('#empty').style.display=''; } else render(p);
+};
+(async () => { await loadGrid(); $('#run').click(); })();
+</script>
+</body>
+</html>
