@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Магазин цветов — самооптимизирующийся роутер</title>
+<style>
+  :root{
+    --bg:#f4f6f7; --surface:#ffffff; --border:#e2e7ea; --ink:#1a2327; --soft:#54616a; --faint:#8794a0;
+    --accent:#116a8b; --accent-soft:#e0eef3; --good:#1f7a4d; --warn:#b3541e; --bad:#b32424; --bot:#eef2f4;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; --mono:ui-monospace,monospace;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --bg:#10151a; --surface:#18202a; --border:#28323d; --ink:#e6edf3; --soft:#a7b4c0; --faint:#76828f;
+    --accent:#5cb8d6; --accent-soft:#152730; --good:#5cc98c; --warn:#e0975a; --bad:#e57373; --bot:#1e2833;
+  }}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);min-height:100vh}
+  header{padding:16px 22px;border-bottom:1px solid var(--border);background:var(--surface);display:flex;align-items:center;gap:10px}
+  header h1{font-size:18px;margin:0}
+  header .badge{font-size:11px;color:var(--faint);margin-left:auto;font-family:var(--mono)}
+  main{max-width:920px;margin:0 auto;padding:20px;display:grid;gap:16px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  button{padding:9px 15px;border:none;border-radius:10px;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;font-size:14px}
+  button.ghost{background:var(--accent-soft);color:var(--accent)}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px}
+  .card h2{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--soft)}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--border)}
+  th{color:var(--soft);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.03em}
+  .num{font-family:var(--mono)}
+  tr.choice{background:var(--accent-soft)}
+  .pill{font-size:11px;padding:2px 8px;border-radius:20px;font-weight:600}
+  .up{color:var(--good)} .down{color:var(--bad)}
+  .bar{height:6px;border-radius:4px;background:var(--accent-soft);width:90px;overflow:hidden;display:inline-block;vertical-align:middle}
+  .bar>i{display:block;height:100%;background:var(--accent)}
+  .muted{color:var(--faint)}
+  .chat{display:flex;flex-direction:column;gap:10px}
+  #log{max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
+  .msg{max-width:88%;padding:9px 13px;border-radius:12px;white-space:pre-wrap;line-height:1.45;font-size:14px}
+  .msg.user{align-self:flex-end;background:var(--accent);color:#fff}
+  .msg.bot{align-self:flex-start;background:var(--bot)}
+  .chips{display:flex;gap:8px;flex-wrap:wrap}
+  .chip{font-size:13px;padding:6px 11px;border-radius:20px;background:var(--accent-soft);color:var(--accent);border:none;cursor:pointer;font-weight:500}
+  form{display:flex;gap:8px}
+  input{flex:1;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--ink);font-size:14px}
+</style>
+</head>
+<body>
+  <header>
+    <span style="font-size:22px">🧭</span>
+    <h1>Самооптимизирующийся роутер</h1>
+    <span class="badge" id="engine"></span>
+  </header>
+  <main>
+    <div class="row">
+      <button onclick="refreshHealth()">🔄 Опросить уровни</button>
+      <button class="ghost" onclick="fire(20)">▶ Прогнать 20 запросов</button>
+      <button class="ghost" onclick="poll()">Обновить</button>
+      <span class="muted" id="meta"></span>
+    </div>
+
+    <div class="card">
+      <h2>Уровни (онлайн-модель)</h2>
+      <table><thead><tr>
+        <th>Уровень</th><th>Полезность</th><th>Латентность</th><th>Надёжность</th><th>Стоимость</th><th>В работе</th><th>Проб</th>
+      </tr></thead><tbody id="rows"><tr><td colspan="7" class="muted">Нажмите «Опросить уровни»</td></tr></tbody></table>
+    </div>
+
+    <div class="card chat">
+      <h2>Спросить роутер</h2>
+      <div id="log"></div>
+      <div class="chips">
+        <button class="chip" onclick="quick('Почему выбран этот уровень?')">Почему этот?</button>
+        <button class="chip" onclick="quick('Сравни все уровни')">Сравнить</button>
+        <button class="chip" onclick="quick('Есть проблемные уровни?')">Надёжность</button>
+      </div>
+      <form id="f"><input id="m" placeholder="Спросите о выборе, латентности, надёжности…" autocomplete="off" /><button type="submit">➤</button></form>
+    </div>
+  </main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const sid = 'ops-' + Math.random().toString(36).slice(2);
+const ms = (n) => n==null ? '—' : Math.round(n)+' мс';
+
+async function poll(){
+  const d = await (await fetch('/api/router/stats')).json();
+  const choice = d.decision.choice;
+  const maxU = Math.max(0.0001, ...d.levels.map(l=>l.utility||0));
+  $('rows').innerHTML = d.decision.scored.map(s=>{
+    const l = d.levels.find(x=>x.id===s.id) || s;
+    const rel = Math.round((s.success||0)*100);
+    return `<tr class="${s.id===choice?'choice':''}">
+      <td>${s.name}${s.id===choice?' ◀':''} ${s.alive?'<span class="pill up">online</span>':'<span class="pill down">offline</span>'}</td>
+      <td class="num">${(s.utility||0).toFixed(3)} <span class="bar"><i style="width:${Math.round((s.utility/maxU)*100)}%"></i></span></td>
+      <td class="num">${ms(s.latencyEwma)}</td>
+      <td class="num ${rel<80?'down':''}">${rel}%</td>
+      <td class="num">×${s.cost}</td>
+      <td class="num">${s.inflight}</td>
+      <td class="num">${s.n}</td></tr>`;
+  }).join('');
+  $('meta').textContent = 'выбор: ' + (choice||'—');
+}
+
+async function refreshHealth(){
+  $('meta').textContent = 'опрашиваю…';
+  await fetch('/api/router/refresh',{method:'POST'}); poll();
+}
+
+async function fire(n){
+  $('meta').textContent = 'отправляю '+n+' запросов…';
+  const counts = {};
+  for(let i=0;i<n;i++){
+    try{ const r = await fetch('/api/products'); const by = r.headers.get('X-Served-By-Level')||'?'; counts[by]=(counts[by]||0)+1; }catch(e){}
+  }
+  $('meta').textContent = 'распределение: ' + Object.entries(counts).map(([k,v])=>`${k}:${v}`).join('  ');
+  poll();
+}
+
+function add(role,text){ const d=document.createElement('div'); d.className='msg '+role; d.textContent=text; $('log').appendChild(d); $('log').scrollTop=$('log').scrollHeight; return d; }
+async function ask(text){
+  add('user',text); const t=add('bot','…');
+  try{ const d=await (await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:sid,message:text})})).json();
+    t.textContent = d.reply || d.error || '(нет ответа)'; }
+  catch(e){ t.textContent='Ошибка сети'; }
+}
+function quick(t){ ask(t); }
+$('f').addEventListener('submit',(e)=>{ e.preventDefault(); const v=$('m').value.trim(); if(!v)return; $('m').value=''; ask(v); });
+
+fetch('/api/health').then(r=>r.json()).then(d=>{ $('engine').textContent=(d.engine==='llm'?'Claude API':'rule-based')+' · '+d.backends+' уровней'; });
+refreshHealth();
+</script>
+</body>
+</html>
