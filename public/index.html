@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Rosetta · кросс-языковой верификатор портов</title>
+<style>
+  :root { --bg:#0e1116; --card:#161b22; --line:#232b35; --ink:#e6edf3; --dim:#8b98a6; --ok:#3fb98a; --bad:#e5544b; --acc:#6ea8fe; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.5 system-ui,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+  header { padding:22px 26px; border-bottom:1px solid var(--line); }
+  h1 { margin:0; font-size:19px; } h1 small { color:var(--dim); font-weight:400; font-size:13px; }
+  main { max-width:1000px; margin:0 auto; padding:22px 26px 60px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px; }
+  input { flex:1; min-width:200px; background:var(--card); border:1px solid var(--line); color:var(--ink); padding:9px 12px; border-radius:8px; font:inherit; }
+  button { background:var(--acc); color:#0a1020; border:0; padding:9px 16px; border-radius:8px; font:inherit; font-weight:600; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--ink); border:1px solid var(--line); }
+  button:disabled { opacity:.5; cursor:default; }
+  .cards { display:flex; gap:12px; flex-wrap:wrap; margin:6px 0 20px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 16px; min-width:120px; }
+  .stat b { font-size:24px; display:block; } .stat span { color:var(--dim); font-size:12px; }
+  .grid { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:20px; }
+  .port { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 14px; min-width:150px; }
+  .port b { display:block; } .port.ref { border-color:var(--acc); } .port .tag { font-size:11px; color:var(--dim); }
+  .pill { font-size:12px; padding:2px 8px; border-radius:20px; font-weight:600; }
+  .pill.ok { background:rgba(63,185,138,.15); color:var(--ok); } .pill.bad { background:rgba(229,84,75,.15); color:var(--bad); } .pill.ref { background:rgba(110,168,254,.15); color:var(--acc); }
+  table { width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+  th,td { text-align:left; padding:9px 14px; border-bottom:1px solid var(--line); font-size:14px; }
+  th { color:var(--dim); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.03em; }
+  tr:last-child td { border-bottom:0; }
+  code { background:#0a0e13; padding:1px 6px; border-radius:5px; }
+  .ref-v { color:var(--ok); } .act-v { color:var(--bad); }
+  .banner { padding:12px 16px; border-radius:10px; margin-bottom:16px; font-weight:600; display:none; }
+  .banner.bad { background:rgba(229,84,75,.12); border:1px solid var(--bad); color:#ffb9b3; display:block; }
+  .banner.ok { background:rgba(63,185,138,.1); border:1px solid var(--ok); color:#a7e6cd; display:block; }
+  .hint { color:var(--dim); font-size:13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Rosetta <small>— кросс-языковой верификатор портов · differential conformance одного контракта</small></h1>
+</header>
+<main>
+  <p class="hint">Один и тот же сценарий контракта прогоняется против <b>каждой</b> реализации (PHP, Flask, Express, React+API…). Ответы проецируются в каноническую форму, где волатильные поля (токен заказа, id, время) нормализованы. Любое расхождение наблюдаемого поведения между языками — подсвечено с точным путём. Зафиксируйте baseline, чтобы принять известные расхождения (waiver) и видеть только новые.</p>
+  <div class="row">
+    <input id="ref" placeholder="эталонный порт (referenceName, напр. level1-php)" />
+    <button id="verify">Сверить порты</button>
+    <button id="save" class="ghost" disabled>Принять как baseline</button>
+  </div>
+  <div id="banner" class="banner"></div>
+  <div class="cards" id="cards"></div>
+  <div class="grid" id="ports"></div>
+  <table id="tbl" style="display:none">
+    <thead><tr><th>Порт</th><th>Шаг</th><th>Путь</th><th>Эталон</th><th>Порт</th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <p class="hint" id="empty">Запустите сверку, чтобы увидеть матрицу эквивалентности.</p>
+</main>
+<script>
+const $ = (s) => document.querySelector(s);
+function stat(v, l, cls) { return `<div class="stat"><b class="${cls||''}">${v}</b><span>${l}</span></div>`; }
+function render(r) {
+  const cmp = r.compare || { hasBaseline:false, newDivergences:r.divergences, resolved:[] };
+  const total = r.backends.length;
+  const equiv = r.backends.filter((b) => b.name === r.reference || (r.byBackend[b.name] && r.byBackend[b.name].equivalent)).length;
+  $('#cards').innerHTML =
+    stat(`${equiv}/${total}`, 'портов эквивалентны', r.allEquivalent ? 'ok' : 'bad') +
+    stat(r.divergences.length, 'расхождений', r.divergences.length ? 'bad' : 'ok') +
+    stat(cmp.hasBaseline ? cmp.newDivergences.length : '—', 'новых против baseline', cmp.newDivergences && cmp.newDivergences.length ? 'bad' : 'ok') +
+    stat(r.steps.length, 'шагов контракта', '');
+  const b = $('#banner');
+  if (r.allEquivalent) { b.className = 'banner ok'; b.textContent = `✓ Все порты ведут себя одинаково (эталон «${r.reference}»).`; }
+  else { b.className = 'banner bad'; b.textContent = `⚠ Порты расходятся с эталоном «${r.reference}» — реализации ведут себя по-разному на одном контракте.`; }
+  $('#ports').innerHTML = r.backends.map((bk) => {
+    const st = r.byBackend[bk.name] || {};
+    const isRef = bk.name === r.reference;
+    const cls = !bk.ok ? 'bad' : isRef ? 'ref' : st.equivalent ? 'ok' : 'bad';
+    const label = !bk.ok ? 'недоступен' : isRef ? 'эталон' : st.equivalent ? 'эквивалентен' : `${st.divergent} расхожд.`;
+    return `<div class="port ${isRef ? 'ref' : ''}"><b>${bk.name}</b><span class="tag">${bk.url}</span><br><span class="pill ${cls}">${label}</span></div>`;
+  }).join('');
+  const tb = $('#tbl tbody'); tb.innerHTML = '';
+  for (const d of r.divergences) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td><b>${d.backend}</b></td><td>${d.step}</td><td><code>${d.path || '·'}</code></td><td class="ref-v">${JSON.stringify(d.reference)}</td><td class="act-v">${JSON.stringify(d.actual)}</td>`;
+    tb.appendChild(tr);
+  }
+  $('#tbl').style.display = r.divergences.length ? '' : 'none';
+  $('#empty').style.display = r.divergences.length ? 'none' : '';
+  if (!r.divergences.length) $('#empty').textContent = 'Расхождений нет — все порты эквивалентны.';
+  $('#save').disabled = false;
+}
+$('#verify').onclick = async () => {
+  const btn = $('#verify'); btn.disabled = true; btn.textContent = 'Сверяю…';
+  try { const r = await (await fetch('/api/verify', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ referenceName: $('#ref').value.trim() || undefined }) })).json();
+    if (r.error) { $('#empty').textContent = 'Ошибка: ' + r.error; $('#empty').style.display=''; } else render(r);
+  } catch (e) { $('#empty').textContent = 'Ошибка сети: ' + e.message; }
+  btn.disabled = false; btn.textContent = 'Сверить порты';
+};
+$('#save').onclick = async () => { const r = await (await fetch('/api/baseline', { method:'POST' })).json(); if (!r.error) $('#save').textContent = `Принято: ${r.accepted} ✓`; };
+(async () => { try { const bs = await (await fetch('/api/backends')).json(); if (bs.backends && bs.backends[0]) $('#ref').value = bs.backends[0].name; } catch {} })();
+</script>
+</body>
+</html>
