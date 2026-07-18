@@ -370,6 +370,13 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     ports: ["8109:8109"]
 
+  twin-governor:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/twin-governor-GBpVR
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8110:8110"]
+
   green-router:
     build:
       context: ${REPO:-https://github.com/svend4/daten2.git}#claude/green-router-GBpVR
