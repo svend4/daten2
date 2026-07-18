@@ -1,0 +1,16 @@
+{
+  "name": "flower-shop-agent-pact",
+  "version": "1.0.0",
+  "description": "Pact для ИИ-агентов: consumer-driven контракт поведения. Потребитель декларирует ожидания, харнесс генеративно верифицирует любую версию агента/движка и ловит поведенческие регрессии при смене модели",
+  "private": true,
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.mjs"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "@anthropic-ai/sdk": "^0.65.0"
+  }
+}

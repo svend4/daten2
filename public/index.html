@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pact для ИИ-агентов · flower-shop</title>
+<style>
+  :root { --bg:#0f1216; --card:#171c22; --line:#242c35; --ink:#e8edf2; --dim:#8a97a6; --ok:#3fb98a; --bad:#e5544b; --acc:#c98bdb; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.5 system-ui,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+  header { padding:22px 26px; border-bottom:1px solid var(--line); }
+  h1 { margin:0; font-size:19px; } h1 small { color:var(--dim); font-weight:400; font-size:13px; }
+  main { max-width:960px; margin:0 auto; padding:22px 26px 60px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:16px; }
+  input { flex:1; min-width:220px; background:var(--card); border:1px solid var(--line); color:var(--ink); padding:9px 12px; border-radius:8px; font:inherit; }
+  button { background:var(--acc); color:#1a1020; border:0; padding:9px 16px; border-radius:8px; font:inherit; font-weight:600; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--ink); border:1px solid var(--line); }
+  button:disabled { opacity:.5; cursor:default; }
+  .cards { display:flex; gap:12px; flex-wrap:wrap; margin:6px 0 20px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 16px; min-width:120px; }
+  .stat b { font-size:24px; display:block; } .stat span { color:var(--dim); font-size:12px; }
+  table { width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+  th,td { text-align:left; padding:10px 14px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--dim); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.03em; }
+  tr:last-child td { border-bottom:0; }
+  .pill { font-size:12px; padding:2px 8px; border-radius:20px; font-weight:600; }
+  .pill.ok { background:rgba(63,185,138,.15); color:var(--ok); } .pill.bad { background:rgba(229,84,75,.15); color:var(--bad); }
+  .cat { color:var(--dim); font-size:12px; }
+  .why { color:var(--bad); font-size:13px; margin-top:4px; } .why em { color:var(--dim); font-style:normal; }
+  .banner { padding:12px 16px; border-radius:10px; margin-bottom:16px; font-weight:600; display:none; }
+  .banner.reg { background:rgba(229,84,75,.12); border:1px solid var(--bad); color:#ffb9b3; display:block; }
+  .banner.clean { background:rgba(63,185,138,.1); border:1px solid var(--ok); color:#a7e6cd; display:block; }
+  .hint { color:var(--dim); font-size:13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Pact для ИИ-агентов <small>— consumer-driven контракт поведения · потребитель flower-shop</small></h1>
+</header>
+<main>
+  <p class="hint">Потребитель декларирует, <b>как обязан вести себя</b> агент-продавец. Харнесс проверяет каждое ожидание на семействе формулировок. Зафиксируйте baseline перед сменой модели — и любая поведенческая регрессия будет поймана.</p>
+  <div class="row">
+    <input id="agent" placeholder="URL агента (напр. http://localhost:8070)" />
+    <button id="verify">Верифицировать</button>
+    <button id="save" class="ghost" disabled>Зафиксировать baseline</button>
+  </div>
+  <div id="banner" class="banner"></div>
+  <div class="cards" id="cards"></div>
+  <table id="tbl" style="display:none">
+    <thead><tr><th>Ожидание</th><th>Категория</th><th>Проверок</th><th>Статус</th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <p class="hint" id="empty">Запустите верификацию, чтобы увидеть результаты пакта.</p>
+</main>
+<script>
+const $ = (s) => document.querySelector(s);
+let hasBaseline = false;
+async function health() { try { const h = await (await fetch('/api/health')).json(); $('#agent').value = h.agent || ''; } catch {} }
+function stat(v, l, cls) { return `<div class="stat"><b class="${cls||''}">${v}</b><span>${l}</span></div>`; }
+function render(r) {
+  const cmp = r.compare || { hasBaseline:false, regressions:[], fixes:[] };
+  $('#cards').innerHTML =
+    stat(`${r.held}/${r.total}`, 'ожиданий держится', r.allHold ? 'ok' : 'bad') +
+    stat(r.allHold ? 'ДА' : 'НЕТ', 'пакт соблюдён', r.allHold ? 'ok' : 'bad') +
+    stat(cmp.regressions.length, 'регрессий', cmp.regressions.length ? 'bad' : 'ok') +
+    stat(cmp.fixes.length, 'исправлений', 'ok');
+  const b = $('#banner');
+  if (cmp.hasBaseline && cmp.regressions.length) { b.className = 'banner reg'; b.textContent = `⚠ Поведенческая регрессия при смене модели: ` + cmp.regressions.map((x) => x.name).join('; '); }
+  else if (cmp.hasBaseline) { b.className = 'banner clean'; b.textContent = '✓ Регрессий против baseline нет — смена модели безопасна.'; }
+  else { b.className = 'banner'; b.textContent=''; }
+  const tb = $('#tbl tbody'); tb.innerHTML = '';
+  for (const x of r.results) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td><b>${x.name}</b>${x.ok ? '' : `<div class="why">${x.reason || 'нарушено'}${x.failedInput ? ` <em>· ввод: «${x.failedInput}»</em>` : ''}${x.reply ? `<br><em>ответ: «${x.reply}»</em>` : ''}</div>`}</td>`
+      + `<td class="cat">${x.category}</td><td>${x.tested}</td><td><span class="pill ${x.ok ? 'ok' : 'bad'}">${x.ok ? 'держится' : 'нарушено'}</span></td>`;
+    tb.appendChild(tr);
+  }
+  $('#tbl').style.display = ''; $('#empty').style.display = 'none';
+  $('#save').disabled = false;
+}
+$('#verify').onclick = async () => {
+  const btn = $('#verify'); btn.disabled = true; btn.textContent = 'Проверяю…';
+  try { const r = await (await fetch('/api/verify', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ agentUrl: $('#agent').value.trim() || undefined }) })).json();
+    if (r.error) { $('#empty').textContent = 'Ошибка: ' + r.error; $('#empty').style.display=''; } else render(r);
+  } catch (e) { $('#empty').textContent = 'Ошибка сети: ' + e.message; }
+  btn.disabled = false; btn.textContent = 'Верифицировать';
+};
+$('#save').onclick = async () => { const r = await (await fetch('/api/baseline', { method:'POST' })).json(); if (!r.error) { hasBaseline = true; $('#save').textContent = `Baseline: ${r.held}/${r.total} ✓`; } };
+health();
+</script>
+</body>
+</html>
