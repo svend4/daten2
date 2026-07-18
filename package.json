@@ -1,0 +1,16 @@
+{
+  "name": "flower-shop-distill-deploy",
+  "version": "1.0.0",
+  "description": "Distillation-as-deployment: MLOps-конвейер модели-ученика как сервиса — версионированный артефакт, канареечный гейт качества против учителя, продакшн-инференс и авто-откат при просадке согласия ниже SLO",
+  "private": true,
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.mjs"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "@anthropic-ai/sdk": "^0.65.0"
+  }
+}

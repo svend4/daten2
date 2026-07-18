@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Distillation-as-deployment</title>
+<style>
+  :root { --bg:#0d0f14; --card:#161a22; --line:#242c38; --ink:#e7edf4; --dim:#8a97a6; --ok:#3fb98a; --bad:#e5544b; --acc:#a78bfa; --warn:#f0b45c; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.5 system-ui,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+  header { padding:22px 26px; border-bottom:1px solid var(--line); }
+  h1 { margin:0; font-size:19px; } h1 small { color:var(--dim); font-weight:400; font-size:13px; }
+  main { max-width:1000px; margin:0 auto; padding:22px 26px 60px; }
+  .cards { display:flex; gap:12px; flex-wrap:wrap; margin:6px 0 20px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 16px; min-width:120px; }
+  .stat b { font-size:22px; display:block; } .stat span { color:var(--dim); font-size:12px; }
+  h2 { font-size:14px; text-transform:uppercase; letter-spacing:.04em; color:var(--dim); margin:22px 0 10px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
+  button { background:var(--acc); color:#140b28; border:0; padding:9px 14px; border-radius:8px; font:inherit; font-weight:600; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--ink); border:1px solid var(--line); }
+  input { background:#0a0e13; border:1px solid var(--line); color:var(--ink); padding:8px 10px; border-radius:8px; font:inherit; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th,td { text-align:left; padding:8px 12px; border-bottom:1px solid var(--line); } th { color:var(--dim); font-size:12px; text-transform:uppercase; }
+  tr:last-child td { border-bottom:0; }
+  .badge { font-size:11px; padding:1px 8px; border-radius:20px; }
+  .b-production{background:rgba(63,185,138,.16);color:var(--ok)} .b-rejected{background:rgba(229,84,75,.15);color:var(--bad)}
+  .b-retired{background:rgba(138,151,166,.15);color:var(--dim)} .b-rolled-back{background:rgba(240,180,92,.16);color:var(--warn)} .b-canary{background:rgba(167,139,250,.16);color:var(--acc)}
+  .bar { display:inline-block; height:8px; border-radius:4px; background:var(--acc); vertical-align:middle; }
+  .log { font-family:ui-monospace,monospace; font-size:12.5px; white-space:pre-wrap; color:var(--dim); background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px; }
+  .inc { color:var(--warn); } .hint { color:var(--dim); font-size:13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Distillation-as-deployment <small>— модель-ученик как версионируемый сервис: канареечный гейт + авто-откат</small></h1>
+</header>
+<main>
+  <p class="hint">Дистилляция (`:8089`) обучает крошечную модель-ученика, имитирующую учителя-правила. Здесь — её <b>жизненный цикл в проде</b>: каждая версия проходит <b>канареечный гейт качества</b> (согласие с учителем ≥ SLO и не хуже действующей), лучшая идёт в продакшн-инференс, а при просадке живого согласия ниже SLO срабатывает <b>авто-откат</b> к последней хорошей версии.</p>
+  <div class="cards" id="cards"></div>
+  <div class="row">
+    <button id="good">Выкатить хорошую версию</button>
+    <button id="under" class="ghost">Выкатить недоученную</button>
+    <button id="blind" class="ghost">Выкатить со слепым пятном (без order)</button>
+    <button id="drift" class="ghost" style="border-color:var(--warn);color:var(--warn)">Прогнать order-heavy (проверка дрейфа)</button>
+  </div>
+  <div class="row">
+    <input id="q" placeholder="реплика для инференса, напр. сколько стоит роза" style="flex:1;min-width:220px" />
+    <button id="pred">Классифицировать</button>
+    <span id="predout" class="hint"></span>
+  </div>
+  <h2>Версии модели</h2>
+  <table id="models"><thead><tr><th>Версия</th><th>Статус</th><th>Канареечное согласие</th></tr></thead><tbody></tbody></table>
+  <h2>Журнал</h2>
+  <div class="log" id="log">—</div>
+</main>
+<script>
+const $ = (s) => document.querySelector(s);
+let n = 0;
+function logLine(t, inc) { $('#log').innerHTML = `<span class="${inc?'inc':''}">${t}</span>\n` + $('#log').innerHTML; }
+async function refresh() {
+  const h = await (await fetch('/api/health')).json();
+  const m = await (await fetch('/api/models')).json();
+  $('#cards').innerHTML =
+    `<div class="stat"><b>${h.versions}</b><span>версий</span></div>` +
+    `<div class="stat"><b style="color:var(--ok)">${h.production||'—'}</b><span>в продакшне</span></div>` +
+    `<div class="stat"><b>${h.floor}</b><span>SLO согласия</span></div>` +
+    `<div class="stat"><b style="color:var(--warn)">${h.incidents}</b><span>авто-откатов</span></div>`;
+  $('#models tbody').innerHTML = m.models.map((x) => `<tr><td><b>${x.version}</b></td><td><span class="badge b-${x.state}">${x.state}</span></td><td><span class="bar" style="width:${Math.round((x.canaryAgreement||0)*120)}px"></span> ${x.canaryAgreement}</td></tr>`).join('');
+}
+async function deploy(opts, label) { const r = await (await fetch('/api/deploy', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(opts) })).json(); logLine(`${label} ${r.version}: ${r.promoted?'✓ промоушен':'✗ отклонён'} (согласие ${r.canaryAgreement}) — ${r.reason}`); refresh(); }
+$('#good').onclick = () => deploy({ version: 'v'+(++n), epochs: 200, trainSeed: n }, 'хорошая');
+$('#under').onclick = () => deploy({ version: 'v'+(++n), epochs: 0 }, 'недоученная');
+$('#blind').onclick = () => deploy({ version: 'v'+(++n), classes: ['catalog','price','greeting','other'], evalClasses: ['catalog','price','greeting','other'], epochs: 200 }, 'слепая');
+$('#drift').onclick = async () => { const r = await (await fetch('/api/monitor', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ classes: ['order','order','order','order','catalog'], size: 160, seed: 777 }) })).json(); logLine(`мониторинг ${r.prod}: живое согласие ${r.liveAgreement} → ${r.breached?(r.rolledBack?'АВТО-ОТКАТ к '+r.rollback.to:'нарушение SLO'):'в норме'}`, r.breached); refresh(); };
+$('#pred').onclick = async () => { const r = await (await fetch('/api/predict', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text: $('#q').value }) })).json(); $('#predout').textContent = r.error ? r.error : `${r.version}: «${r.label}» (${r.prob}) · учитель: ${r.teacher}`; };
+refresh();
+</script>
+</body>
+</html>
