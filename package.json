@@ -1,0 +1,16 @@
+{
+  "name": "flower-shop-polyglot-benchmark",
+  "version": "1.0.0",
+  "description": "Полиглот-бенчмарк: воспроизводимое кросс-языковое перф-исследование семи стеков за единым контрактом с генерацией публикуемого отчёта (Markdown/HTML)",
+  "private": true,
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.mjs"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "@anthropic-ai/sdk": "^0.65.0"
+  }
+}

@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Магазин цветов — полиглот-бенчмарк</title>
+<style>
+  :root{
+    --bg:#f5f6f8; --surface:#fff; --border:#e3e6ea; --ink:#18202a; --soft:#556; --faint:#8794a0;
+    --accent:#116a8b; --accent-soft:#e0eef3; --ok:#1f7a4d; --code:#12151f; --codeink:#dbe4f0;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; --mono:ui-monospace,monospace;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --bg:#10151a; --surface:#18202a; --border:#28323d; --ink:#e6edf3; --soft:#a7b4c0; --faint:#76828f;
+    --accent:#5cb8d6; --accent-soft:#152730; --ok:#5cc98c; --code:#0c0e16; --codeink:#cdd6e8;
+  }}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);min-height:100vh}
+  header{padding:16px 22px;border-bottom:1px solid var(--border);background:var(--surface);display:flex;align-items:center;gap:10px}
+  header h1{font-size:18px;margin:0}
+  header .badge{font-size:11px;color:var(--faint);margin-left:auto;font-family:var(--mono)}
+  main{max-width:900px;margin:0 auto;padding:20px;display:grid;gap:16px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px}
+  .card h2{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--soft)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  label{font-size:13px;color:var(--soft);display:flex;gap:6px;align-items:center}
+  select,input{padding:8px 10px;border:1px solid var(--border);border-radius:9px;background:var(--bg);color:var(--ink);font-size:14px}
+  button{padding:9px 15px;border:none;border-radius:10px;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;font-size:14px}
+  a.dl{padding:8px 13px;border-radius:9px;background:var(--accent-soft);color:var(--accent);text-decoration:none;font-weight:600;font-size:13px}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:right;padding:7px 8px;border-bottom:1px solid var(--border)}
+  th:nth-child(-n+4),td:nth-child(-n+4){text-align:left}
+  th{color:var(--soft);font-size:12px;text-transform:uppercase}
+  tr.top{background:var(--accent-soft)}
+  .num{font-family:var(--mono)}
+  pre{background:var(--code);color:var(--codeink);border-radius:10px;padding:14px;overflow:auto;font-family:var(--mono);font-size:12.5px;line-height:1.55;max-height:360px;white-space:pre-wrap}
+  .muted{color:var(--faint)}
+</style>
+</head>
+<body>
+  <header>
+    <span style="font-size:22px">🏁</span>
+    <h1>Полиглот-бенчмарк · 7 стеков</h1>
+    <span class="badge" id="engine"></span>
+  </header>
+  <main>
+    <div class="card">
+      <h2>Прогон</h2>
+      <div class="row">
+        <label>Эндпоинт<select id="ep"><option>/api/products</option><option>/api/health</option></select></label>
+        <label>Запросов<input id="reqs" class="num" type="number" value="100" style="width:80px"></label>
+        <label>Параллелизм<input id="conc" class="num" type="number" value="10" style="width:64px"></label>
+        <button onclick="run()">▶ Прогнать и собрать отчёт</button>
+        <a class="dl" id="dlmd" href="/api/report.md" target="_blank">⬇ report.md</a>
+        <a class="dl" id="dlhtml" href="/api/report.html" target="_blank">⬇ report.html</a>
+        <span class="muted" id="meta"></span>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Сравнение стеков</h2>
+      <table><thead><tr><th>#</th><th>Стек</th><th>Язык</th><th>Хранилище</th><th>p50</th><th>p95</th><th>p99</th><th>rps</th><th>success</th><th>rps/Вт</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="10" class="muted">Запустите прогон</td></tr></tbody></table>
+    </div>
+    <div class="card">
+      <h2>Публикуемый отчёт (Markdown)</h2>
+      <pre id="report" class="muted">— прогон сгенерирует отчёт —</pre>
+    </div>
+  </main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const c = (v) => v==null?'—':v;
+async function run(){
+  $('meta').textContent='нагружаю стеки…';
+  const body = { endpoint:$('ep').value, requests:+$('reqs').value, concurrency:+$('conc').value };
+  const d = await (await fetch('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})).json();
+  if(d.error){ $('meta').textContent='ошибка: '+d.error; return; }
+  $('meta').textContent = `${d.meta.requests}×${d.meta.concurrency} по ${d.meta.endpoint}`;
+  $('rows').innerHTML = d.results.map(r=> r.alive
+    ? `<tr class="${r.rank===1?'top':''}"><td class="num">${r.rank}</td><td>${r.name}</td><td>${r.language}</td><td>${r.storage}</td>
+       <td class="num">${c(r.p50)}</td><td class="num">${c(r.p95)}</td><td class="num">${c(r.p99)}</td><td class="num">${c(r.rps)}</td>
+       <td class="num">${Math.round((r.success_ratio||0)*100)}%</td><td class="num">${c(r.rps_per_watt)}</td></tr>`
+    : `<tr><td>—</td><td>${r.name}</td><td>${r.language}</td><td>${r.storage}</td><td colspan="6" class="muted">offline</td></tr>`).join('');
+  $('report').classList.remove('muted');
+  $('report').textContent = await (await fetch('/api/report.md')).text();
+}
+fetch('/api/health').then(r=>r.json()).then(d=>{ $('engine').textContent=(d.engine==='llm'?'Claude':'rule-based')+' · '+d.stacks+' стеков'; });
+</script>
+</body>
+</html>
