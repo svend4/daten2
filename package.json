@@ -1,0 +1,16 @@
+{
+  "name": "flower-shop-shadow-canary",
+  "version": "1.0.0",
+  "description": "Shadow/canary через роутер: зеркалирование трафика на кандидат-версию уровня, diff-тестирование ответов и канареечный процент с авто-откатом",
+  "private": true,
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.mjs"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "@anthropic-ai/sdk": "^0.65.0"
+  }
+}

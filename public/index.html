@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Магазин цветов — shadow/canary</title>
+<style>
+  :root{
+    --bg:#f4f6f9; --surface:#fff; --border:#e2e7ee; --ink:#1a2030; --soft:#556; --faint:#8791a4;
+    --accent:#3a5bb8; --accent-soft:#e2e8fb; --ok:#1f7a4d; --bad:#b32424; --warn:#b3771e;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; --mono:ui-monospace,monospace;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --bg:#101320; --surface:#181c2b; --border:#282f45; --ink:#e6eaf5; --soft:#a6afc6; --faint:#767f98;
+    --accent:#8a9cf0; --accent-soft:#1b2238; --ok:#5cc98c; --bad:#e57373; --warn:#e0af5a;
+  }}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);min-height:100vh}
+  header{padding:16px 22px;border-bottom:1px solid var(--border);background:var(--surface);display:flex;align-items:center;gap:10px}
+  header h1{font-size:18px;margin:0}
+  header .badge{font-size:11px;color:var(--faint);margin-left:auto;font-family:var(--mono)}
+  main{max-width:880px;margin:0 auto;padding:20px;display:grid;gap:16px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px}
+  .card h2{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--soft)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  input,select{padding:8px 10px;border:1px solid var(--border);border-radius:9px;background:var(--bg);color:var(--ink);font-size:14px}
+  input{flex:1;min-width:160px;font-family:var(--mono);font-size:13px}
+  button{padding:9px 14px;border:none;border-radius:10px;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;font-size:14px}
+  button.ghost{background:var(--accent-soft);color:var(--accent)}
+  button.ok{background:var(--ok)} button.bad{background:var(--bad)}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px}
+  .kpi{background:var(--accent-soft);border-radius:10px;padding:11px}
+  .kpi .v{font-size:20px;font-weight:700;font-family:var(--mono)}
+  .kpi .l{font-size:12px;color:var(--soft)}
+  .bar{height:22px;border-radius:6px;overflow:hidden;display:flex;font-size:12px;color:#fff}
+  .bar .p{background:var(--accent);display:flex;align-items:center;justify-content:center}
+  .bar .c{background:var(--warn);display:flex;align-items:center;justify-content:center}
+  .diff{font-family:var(--mono);font-size:12px;background:var(--accent-soft);border-radius:8px;padding:8px;margin-top:6px;white-space:pre-wrap}
+  .muted{color:var(--faint);font-size:13px}
+  .pill{font-size:12px;font-weight:700;padding:2px 9px;border-radius:20px;background:var(--accent-soft);color:var(--accent)}
+</style>
+</head>
+<body>
+  <header>
+    <span style="font-size:22px">🕶️</span>
+    <h1>Shadow / Canary</h1>
+    <span class="badge" id="engine"></span>
+  </header>
+  <main>
+    <div class="card">
+      <h2>Конфигурация выката</h2>
+      <div class="row"><span class="muted" style="width:80px">primary</span><input id="primary"></div>
+      <div class="row" style="margin-top:6px"><span class="muted" style="width:80px">candidate</span><input id="candidate"></div>
+      <div class="row" style="margin-top:8px">
+        <select id="mode"><option value="off">off</option><option value="shadow">shadow</option><option value="canary">canary</option></select>
+        <span class="muted">canary %</span><input id="pct" type="number" min="0" max="100" value="0" style="max-width:80px;flex:none">
+        <button onclick="save()">Применить</button>
+        <button class="ghost" onclick="fire(10)">▶ 10 запросов</button>
+        <button class="ghost" onclick="reset()">Сброс</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Shadow · diff-тестирование</h2>
+      <div class="kpis" id="shadow"></div>
+      <div id="samples"></div>
+    </div>
+
+    <div class="card">
+      <h2>Canary · распределение и здоровье</h2>
+      <div class="bar" id="split"><div class="p" style="width:50%">primary</div><div class="c" style="width:50%">candidate</div></div>
+      <div class="kpis" id="canary" style="margin-top:10px"></div>
+      <div class="row" style="margin-top:10px">
+        <button class="ok" onclick="promote()">Промоутить кандидат</button>
+        <button class="bad" onclick="rollback()">Откат</button>
+        <span class="muted" id="pmsg"></span>
+      </div>
+    </div>
+  </main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+async function load(){
+  const c = await (await fetch('/api/config')).json();
+  $('primary').value=c.primary; $('candidate').value=c.candidate; $('mode').value=c.mode; $('pct').value=Math.round(c.canaryPct*100);
+  refresh();
+}
+async function save(){ await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({primary:$('primary').value,candidate:$('candidate').value,mode:$('mode').value,canaryPct:(+$('pct').value)/100})}); refresh(); }
+async function reset(){ await fetch('/api/reset',{method:'POST'}); refresh(); }
+async function fire(n){ for(let i=0;i<n;i++) await fetch('/api/products'); refresh(); }
+async function promote(){ const d=await (await fetch('/api/promote',{method:'POST'})).json(); $('pmsg').textContent=d.ok?('промоутнут → '+d.primary):('не готов: '+(d.reason||'')); load(); }
+async function rollback(){ await fetch('/api/rollback',{method:'POST'}); $('pmsg').textContent='откат выполнен'; load(); }
+
+async function refresh(){
+  const s = await (await fetch('/api/stats')).json();
+  const sh=s.shadow;
+  $('shadow').innerHTML = [
+    ['Сравнено', sh.compared],['Совпало', sh.matches],['Расхождений', sh.diffs],
+    ['Совпадение', sh.matchRate==null?'—':Math.round(sh.matchRate*100)+'%'],['Ошибок канд.', sh.candidateErrors],
+  ].map(([l,v])=>`<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
+  $('samples').innerHTML = sh.samples && sh.samples.length ? '<div class="muted" style="margin-top:8px">Пример расхождения:</div><div class="diff">'+sh.samples[0].diffs.map(d=>`${d.path}: ${JSON.stringify(d.a)} ≠ ${JSON.stringify(d.b)}`).join('\n')+'</div>' : '';
+  const cn=s.canary; const tot=cn.primary.served+cn.candidate.served||1;
+  const cp=Math.round(cn.candidate.served/tot*100);
+  $('split').innerHTML = `<div class="p" style="width:${100-cp}%">primary ${cn.primary.served}</div><div class="c" style="width:${cp}%">canary ${cn.candidate.served}</div>`;
+  $('canary').innerHTML = [
+    ['Canary %', Math.round(s.canaryPct*100)+'%'],['Ошибки primary', Math.round(cn.primary.errorRate*100)+'%'],
+    ['Ошибки candidate', Math.round(cn.candidate.errorRate*100)+'%'],['Откатов', cn.rollbacks],
+  ].map(([l,v])=>`<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
+}
+fetch('/api/health').then(r=>r.json()).then(d=>{ $('engine').textContent=(d.engine==='llm'?'Claude':'rule-based')+' · '+d.mode; });
+load();
+</script>
+</body>
+</html>
