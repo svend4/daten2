@@ -293,6 +293,16 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     ports: ["8089:8089"]
 
+  evals:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/evals-GBpVR
+    environment:
+      TARGET_URL: http://router:8073
+      CHAT_URL: http://storefront:8070
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8090:8090"]
+    depends_on: ["router", "storefront"]
+
   # ======================= ОБЩИЕ СЕРВИСЫ (профиль commerce) =======================
   auth:
     build:
