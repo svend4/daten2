@@ -1,0 +1,16 @@
+{
+  "name": "flower-shop-contract-cdc",
+  "version": "1.0.0",
+  "description": "Контракт-codegen + CDC (Pact): генерация типизированных клиентов из спецификации и consumer-driven contract-тесты, машинно гарантирующие взаимозаменяемость уровней",
+  "private": true,
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.mjs"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "@anthropic-ai/sdk": "^0.65.0"
+  }
+}
