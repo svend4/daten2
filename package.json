@@ -1,0 +1,16 @@
+{
+  "name": "flower-shop-green-router",
+  "version": "1.0.0",
+  "description": "Green/FinOps-роутер: многокритериальный выбор уровня (латентность/стоимость/углерод/надёжность) с настраиваемыми весами и учётом €/запрос и gCO2/запрос",
+  "private": true,
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.mjs"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "@anthropic-ai/sdk": "^0.65.0"
+  }
+}
