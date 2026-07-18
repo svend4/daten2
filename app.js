@@ -128,12 +128,91 @@ app.get('/order/:orderNumber', (req, res) => {
     );
 });
 
-// API
+// ============= ЕДИНЫЙ JSON API (канонический контракт) =============
+
+// promise-обёртки над sqlite3 для читаемого async-кода
+const dbGet = (sql, p = []) => new Promise((res, rej) => db.get(sql, p, (e, r) => (e ? rej(e) : res(r))));
+const dbAll = (sql, p = []) => new Promise((res, rej) => db.all(sql, p, (e, r) => (e ? rej(e) : res(r))));
+const dbRun = (sql, p = []) => new Promise((res, rej) => db.run(sql, p, function (e) { e ? rej(e) : res(this); }));
+
+app.get('/api/health', (req, res) => res.json({ ok: true, level: 4, stack: 'Express' }));
+
 app.get('/api/products', (req, res) => {
-    db.all('SELECT * FROM products WHERE is_active = 1', [], (err, products) => {
-        if (err) return res.status(500).json({ error: 'Database error' });
-        res.json(products);
-    });
+    db.all(
+        `SELECT p.*, c.name AS category_name
+         FROM products p LEFT JOIN categories c ON c.id = p.category_id
+         WHERE p.is_active = 1
+         ORDER BY p.is_featured DESC, p.name`,
+        [],
+        (err, products) => {
+            if (err) return res.status(500).json({ error: 'Database error' });
+            res.json(products);
+        }
+    );
+});
+
+app.post('/api/orders', async (req, res) => {
+    const { name, phone, email, address } = req.body || {};
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    if (!name || items.length === 0) {
+        return res.status(400).json({ error: 'name/items required' });
+    }
+    try {
+        const priced = [];
+        let subtotal = 0;
+        for (const it of items) {
+            const qty = Math.max(1, parseInt(it.quantity ?? it.qty, 10) || 1);
+            const p = await dbGet('SELECT name, price FROM products WHERE id = ?', [it.product_id]);
+            if (!p) continue;
+            const lineTotal = p.price * qty;
+            subtotal += lineTotal;
+            priced.push({ id: it.product_id, name: p.name, qty, price: p.price, lineTotal });
+        }
+        if (priced.length === 0) return res.status(400).json({ error: 'no valid items' });
+
+        const orderNumber = crypto.randomUUID().replace(/-/g, '');
+        await dbRun('BEGIN');
+        try {
+            const cust = await dbRun('INSERT INTO customers (name, phone, email, address) VALUES (?, ?, ?, ?)',
+                [name, phone || '', email || '', address || '']);
+            const ord = await dbRun(
+                `INSERT INTO orders (order_number, customer_id, subtotal, total_amount, delivery_address, status, payment_status)
+                 VALUES (?, ?, ?, ?, ?, 'new', 'pending')`,
+                [orderNumber, cust.lastID, subtotal, subtotal, address || '']);
+            for (const it of priced) {
+                await dbRun(
+                    `INSERT INTO order_items (order_id, product_id, product_name, quantity, unit_price, line_total)
+                     VALUES (?, ?, ?, ?, ?, ?)`,
+                    [ord.lastID, it.id, it.name, it.qty, it.price, it.lineTotal]);
+                await dbRun('UPDATE products SET stock = stock - ? WHERE id = ?', [it.qty, it.id]);
+            }
+            await dbRun("INSERT INTO order_status_history (order_id, status, note) VALUES (?, 'new', 'Заказ создан')", [ord.lastID]);
+            await dbRun('COMMIT');
+        } catch (txErr) {
+            await dbRun('ROLLBACK');
+            throw txErr;
+        }
+        res.status(201).json({ order_number: orderNumber, total: subtotal });
+    } catch (e) {
+        res.status(400).json({ error: 'order failed' });
+    }
+});
+
+app.get('/api/orders/:orderNumber', async (req, res) => {
+    try {
+        const order = await dbGet(
+            `SELECT o.*, c.name AS customer_name, c.phone
+             FROM orders o JOIN customers c ON c.id = o.customer_id
+             WHERE o.order_number = ?`,
+            [req.params.orderNumber]);
+        if (!order) return res.status(404).json({ error: 'not found' });
+        const items = await dbAll(
+            'SELECT product_name, quantity, unit_price, line_total FROM order_items WHERE order_id = ?',
+            [order.id]);
+        res.json({ order, items });
+    } catch (e) {
+        res.status(500).json({ error: 'Database error' });
+    }
 });
 
 module.exports = app;

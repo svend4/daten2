@@ -35,3 +35,11 @@ jobs:
           echo "$LOC" | grep -qE "/order/[0-9a-f]{32}"
           curl -fsS "$LOC" | grep -q "принят"
           echo "Богатый поток заказа OK ✓"
+          # единый JSON API-контракт
+          curl -fsS http://127.0.0.1:3000/api/health | grep -q '"level":4'
+          curl -fsS http://127.0.0.1:3000/api/products | grep -q "category_name"
+          TOK=$(curl -fsS -X POST -H "Content-Type: application/json" \
+            -d '{"name":"CI","phone":"0","items":[{"product_id":1,"quantity":1}]}' \
+            http://127.0.0.1:3000/api/orders | grep -oE '[0-9a-f]{32}')
+          curl -fsS "http://127.0.0.1:3000/api/orders/$TOK" | grep -q '"payment_status":"pending"'
+          echo "Единый API OK ✓"
