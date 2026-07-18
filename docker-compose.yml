@@ -358,6 +358,15 @@ services:
     ports: ["8097:8097"]
     depends_on: ["router"]
 
+  property-tests:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/property-tests-GBpVR
+    environment:
+      TARGET_URL: http://router:8073
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8098:8098"]
+    depends_on: ["router"]
+
   # ======================= ОБЩИЕ СЕРВИСЫ (профиль commerce) =======================
   auth:
     build:
