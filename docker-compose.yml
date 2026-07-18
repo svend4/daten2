@@ -259,6 +259,15 @@ services:
     ports: ["8077:8077"]
     depends_on: ["router"]
 
+  market:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/agent-market-GBpVR
+    environment:
+      BACKEND_URL: http://router:8073
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8078:8078"]
+    depends_on: ["router"]
+
   # ======================= ОБЩИЕ СЕРВИСЫ (профиль commerce) =======================
   auth:
     build:
