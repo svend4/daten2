@@ -286,6 +286,13 @@ services:
     ports: ["8088:8088"]
     depends_on: ["router"]
 
+  distillation:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/distillation-GBpVR
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8089:8089"]
+
   # ======================= ОБЩИЕ СЕРВИСЫ (профиль commerce) =======================
   auth:
     build:
