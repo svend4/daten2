@@ -1,0 +1,16 @@
+{
+  "name": "flower-shop-evals",
+  "version": "1.0.0",
+  "description": "Авто-эвалы и LLM-as-judge: харнесс проверяет соответствие контракту, инварианты и качество поведения витрины, строит scorecard и ловит регрессии против baseline",
+  "private": true,
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.mjs"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "@anthropic-ai/sdk": "^0.65.0"
+  }
+}
