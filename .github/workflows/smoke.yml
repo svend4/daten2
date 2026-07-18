@@ -24,16 +24,24 @@ jobs:
       - name: Build DB from canonical schema
         run: php init_db.php
 
-      - name: Boot server and check catalog + rich order
+      - name: Boot server and check catalog + rich order + API
         run: |
-          php -S 127.0.0.1:8000 >/tmp/php.log 2>&1 &
+          php -S 127.0.0.1:8000 index.php >/tmp/php.log 2>&1 &
           sleep 2
           curl -fsS http://127.0.0.1:8000/ | grep -q "Магазин цветов"
           echo "Каталог отдаётся ✓"
           curl -fsS -X POST \
             -d "action=order&name=CI&phone=0&email=a@b.c&address=x&product_id=1&quantity=1" \
             http://127.0.0.1:8000/ | grep -q "оформлен"
-          echo "Заказ оформляется ✓"
+          echo "Заказ (форма) оформляется ✓"
+          # единый JSON API-контракт
+          curl -fsS http://127.0.0.1:8000/api/health | grep -q '"level":1'
+          curl -fsS http://127.0.0.1:8000/api/products | grep -q "category_name"
+          TOK=$(curl -fsS -X POST -H "Content-Type: application/json" \
+            -d '{"name":"CI","phone":"0","items":[{"product_id":1,"quantity":1}]}' \
+            http://127.0.0.1:8000/api/orders | grep -oE '[0-9a-f]{32}')
+          curl -fsS "http://127.0.0.1:8000/api/orders/$TOK" | grep -q '"payment_status":"pending"'
+          echo "Единый API OK ✓"
 
       - name: Assert rich schema invariants
         run: |

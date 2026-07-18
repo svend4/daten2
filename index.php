@@ -1,6 +1,14 @@
 <?php
 // index.php - ВЕСЬ САЙТ В ОДНОМ ФАЙЛЕ!
 
+// Встроенный сервер (php -S ... index.php): реальные файлы отдаём как есть
+if (php_sapi_name() === 'cli-server') {
+    $__p = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+    if ($__p !== '/' && file_exists(__DIR__ . $__p) && !is_dir(__DIR__ . $__p)) {
+        return false;
+    }
+}
+
 // Гарантируем наличие БД (схема + сид из канонических schema.sql/seed.sql)
 require_once __DIR__ . '/init_db.php';
 $dbFile = getenv('DATABASE_PATH') ?: __DIR__ . '/flowers.db';
@@ -11,6 +19,133 @@ if (!file_exists($dbFile)) {
 // Подключение к базе данных
 $db = new SQLite3($dbFile);
 $db->exec('PRAGMA foreign_keys = ON');
+
+// ========== ЕДИНЫЙ JSON API (канонический контракт) ==========
+$__path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+if (strpos($__path, '/api/') === 0) {
+    header('Content-Type: application/json; charset=utf-8');
+
+    if ($__path === '/api/health') {
+        echo json_encode(['ok' => true, 'level' => 1, 'stack' => 'PHP']);
+        exit;
+    }
+
+    if ($__path === '/api/products') {
+        $rows = [];
+        $r = $db->query('SELECT p.*, c.name AS category_name FROM products p
+                         LEFT JOIN categories c ON c.id = p.category_id
+                         WHERE p.is_active = 1 ORDER BY p.is_featured DESC, p.name');
+        while ($row = $r->fetchArray(SQLITE3_ASSOC)) {
+            $row['price'] = (float) $row['price'];
+            $row['is_featured'] = (bool) $row['is_featured'];
+            $rows[] = $row;
+        }
+        echo json_encode($rows, JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($__path === '/api/orders' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data = json_decode(file_get_contents('php://input'), true) ?: [];
+        $name = trim($data['name'] ?? '');
+        $items = $data['items'] ?? [];
+        if ($name === '' || !$items) {
+            http_response_code(400);
+            echo json_encode(['error' => 'name/items required']);
+            exit;
+        }
+        $order_number = bin2hex(random_bytes(16));
+        $db->exec('BEGIN');
+        try {
+            $priced = [];
+            $subtotal = 0.0;
+            foreach ($items as $it) {
+                $pid = (int) ($it['product_id'] ?? 0);
+                $qty = (int) ($it['quantity'] ?? $it['qty'] ?? 1);
+                if ($qty < 1) continue;
+                $stmt = $db->prepare('SELECT name, price FROM products WHERE id = ?');
+                $stmt->bindValue(1, $pid, SQLITE3_INTEGER);
+                $p = $stmt->execute()->fetchArray(SQLITE3_ASSOC);
+                if (!$p) continue;
+                $line = $p['price'] * $qty;
+                $subtotal += $line;
+                $priced[] = [$pid, $p['name'], $qty, $p['price'], $line];
+            }
+            if (!$priced) throw new Exception('no valid items');
+
+            $stmt = $db->prepare('INSERT INTO customers (name, phone, email, address) VALUES (?, ?, ?, ?)');
+            $stmt->bindValue(1, $name, SQLITE3_TEXT);
+            $stmt->bindValue(2, trim($data['phone'] ?? ''), SQLITE3_TEXT);
+            $stmt->bindValue(3, trim($data['email'] ?? ''), SQLITE3_TEXT);
+            $stmt->bindValue(4, trim($data['address'] ?? ''), SQLITE3_TEXT);
+            $stmt->execute();
+            $customer_id = $db->lastInsertRowID();
+
+            $stmt = $db->prepare('INSERT INTO orders (order_number, customer_id, subtotal, total_amount, delivery_address, status, payment_status) VALUES (?, ?, ?, ?, ?, "new", "pending")');
+            $stmt->bindValue(1, $order_number, SQLITE3_TEXT);
+            $stmt->bindValue(2, $customer_id, SQLITE3_INTEGER);
+            $stmt->bindValue(3, $subtotal, SQLITE3_FLOAT);
+            $stmt->bindValue(4, $subtotal, SQLITE3_FLOAT);
+            $stmt->bindValue(5, trim($data['address'] ?? ''), SQLITE3_TEXT);
+            $stmt->execute();
+            $order_id = $db->lastInsertRowID();
+
+            foreach ($priced as [$pid, $pname, $qty, $price, $line]) {
+                $stmt = $db->prepare('INSERT INTO order_items (order_id, product_id, product_name, quantity, unit_price, line_total) VALUES (?, ?, ?, ?, ?, ?)');
+                $stmt->bindValue(1, $order_id, SQLITE3_INTEGER);
+                $stmt->bindValue(2, $pid, SQLITE3_INTEGER);
+                $stmt->bindValue(3, $pname, SQLITE3_TEXT);
+                $stmt->bindValue(4, $qty, SQLITE3_INTEGER);
+                $stmt->bindValue(5, $price, SQLITE3_FLOAT);
+                $stmt->bindValue(6, $line, SQLITE3_FLOAT);
+                $stmt->execute();
+                $stmt = $db->prepare('UPDATE products SET stock = stock - ? WHERE id = ?');
+                $stmt->bindValue(1, $qty, SQLITE3_INTEGER);
+                $stmt->bindValue(2, $pid, SQLITE3_INTEGER);
+                $stmt->execute();
+            }
+            $stmt = $db->prepare('INSERT INTO order_status_history (order_id, status, note) VALUES (?, "new", "Заказ создан")');
+            $stmt->bindValue(1, $order_id, SQLITE3_INTEGER);
+            $stmt->execute();
+
+            $db->exec('COMMIT');
+            http_response_code(201);
+            echo json_encode(['order_number' => $order_number, 'total' => $subtotal]);
+        } catch (Exception $e) {
+            $db->exec('ROLLBACK');
+            http_response_code(400);
+            echo json_encode(['error' => 'order failed']);
+        }
+        exit;
+    }
+
+    if (preg_match('#^/api/orders/([0-9a-f]+)$#', $__path, $m)) {
+        $stmt = $db->prepare('SELECT o.*, c.name AS customer_name, c.phone FROM orders o
+                              JOIN customers c ON c.id = o.customer_id WHERE o.order_number = ?');
+        $stmt->bindValue(1, $m[1], SQLITE3_TEXT);
+        $order = $stmt->execute()->fetchArray(SQLITE3_ASSOC);
+        if (!$order) {
+            http_response_code(404);
+            echo json_encode(['error' => 'not found']);
+            exit;
+        }
+        $order['total_amount'] = (float) $order['total_amount'];
+        $items = [];
+        $stmt = $db->prepare('SELECT product_name, quantity, unit_price, line_total FROM order_items WHERE order_id = ?');
+        $stmt->bindValue(1, $order['id'], SQLITE3_INTEGER);
+        $ir = $stmt->execute();
+        while ($row = $ir->fetchArray(SQLITE3_ASSOC)) {
+            $row['unit_price'] = (float) $row['unit_price'];
+            $row['line_total'] = (float) $row['line_total'];
+            $items[] = $row;
+        }
+        echo json_encode(['order' => $order, 'items' => $items], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    http_response_code(404);
+    echo json_encode(['error' => 'unknown endpoint']);
+    exit;
+}
 
 // Переменные для сообщений
 $success_message = '';
