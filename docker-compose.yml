@@ -316,6 +316,17 @@ services:
     ports: ["8093:8091"]
     depends_on: ["level1", "level2", "level4", "level5"]
 
+  shadow-canary:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/shadow-canary-GBpVR
+    environment:
+      PRIMARY_URL: http://level1:80        # текущая версия
+      CANDIDATE_URL: http://level2:10000   # кандидат (демо diff двух реальных уровней)
+      MODE: shadow
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8094:8094"]
+    depends_on: ["level1", "level2"]
+
   # ======================= ОБЩИЕ СЕРВИСЫ (профиль commerce) =======================
   auth:
     build:
