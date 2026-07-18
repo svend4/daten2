@@ -42,5 +42,12 @@ jobs:
           assert db.execute('SELECT COUNT(*) FROM customers').fetchone()[0] == 1, 'customer'
           assert db.execute('SELECT order_number FROM orders').fetchone()[0], 'order_number'
           assert db.execute('SELECT COUNT(*) FROM order_status_history').fetchone()[0] == 1, 'history'
-          print('Маршруты + богатая схема OK ✓')
+          # единый JSON API-контракт
+          assert c.get('/api/health').get_json()['level'] == 2, 'health'
+          assert isinstance(c.get('/api/products').get_json(), list), 'api products'
+          ro = c.post('/api/orders', json={'name':'CI','phone':'0','items':[{'product_id':1,'quantity':1}]})
+          assert ro.status_code == 201, 'api create order'
+          tok = ro.get_json()['order_number']
+          assert c.get(f'/api/orders/{tok}').get_json()['order']['payment_status'] == 'pending', 'api get order'
+          print('Маршруты + богатая схема + единый API OK ✓')
           PY

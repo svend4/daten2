@@ -210,6 +210,53 @@ def order_success(order_number):
 
     return render_template('order_success.html', order_data=order_data)
 
+# ============= ЕДИНЫЙ JSON API (канонический контракт) =============
+
+from flask import jsonify
+
+
+@app.get('/api/health')
+def api_health():
+    return jsonify({'ok': True, 'level': 2, 'stack': 'Flask'})
+
+
+@app.get('/api/products')
+def api_products():
+    return jsonify([dict(r) for r in db.get_all_products()])
+
+
+@app.post('/api/orders')
+def api_create_order():
+    data = request.get_json(force=True, silent=True) or {}
+    name = (data.get('name') or '').strip()
+    items = data.get('items') or []
+    if not name or not items:
+        return jsonify({'error': 'name/items required'}), 400
+    customer_data = {
+        'name': name,
+        'phone': (data.get('phone') or '').strip(),
+        'email': (data.get('email') or '').strip(),
+        'address': (data.get('address') or '').strip(),
+    }
+    cart_items = [
+        {'product_id': it.get('product_id'), 'quantity': int(it.get('quantity') or it.get('qty') or 1)}
+        for it in items
+    ]
+    try:
+        order_number, total = db.create_order(customer_data, cart_items)
+    except Exception:
+        return jsonify({'error': 'order failed'}), 400
+    return jsonify({'order_number': order_number, 'total': total}), 201
+
+
+@app.get('/api/orders/<order_number>')
+def api_get_order(order_number):
+    data = db.get_order_by_number(order_number)
+    if not data:
+        return jsonify({'error': 'not found'}), 404
+    return jsonify({'order': data['order'], 'items': data['items']})
+
+
 # ============= ОБРАБОТЧИКИ ОШИБОК =============
 
 @app.errorhandler(404)
