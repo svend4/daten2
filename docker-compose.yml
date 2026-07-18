@@ -349,6 +349,13 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     ports: ["8106:8106"]
 
+  carbon-arbitrage:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/carbon-arbitrage-GBpVR
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8107:8107"]
+
   green-router:
     build:
       context: ${REPO:-https://github.com/svend4/daten2.git}#claude/green-router-GBpVR
