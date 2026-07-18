@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Twin-in-loop governor</title>
+<style>
+  :root { --bg:#0c0f13; --card:#151a20; --line:#232b34; --ink:#e7edf4; --dim:#8a97a6; --ok:#3fb98a; --bad:#e5544b; --warn:#f0b45c; --acc:#4fd1c5; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.5 system-ui,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+  header { padding:22px 26px; border-bottom:1px solid var(--line); }
+  h1 { margin:0; font-size:19px; } h1 small { color:var(--dim); font-weight:400; font-size:13px; }
+  main { max-width:1000px; margin:0 auto; padding:22px 26px 60px; }
+  .cards { display:flex; gap:12px; flex-wrap:wrap; margin:6px 0 20px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 16px; min-width:110px; }
+  .stat b { font-size:22px; display:block; } .stat span { color:var(--dim); font-size:12px; }
+  h2 { font-size:14px; text-transform:uppercase; letter-spacing:.04em; color:var(--dim); margin:20px 0 10px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px; }
+  select,input { background:#0a0e13; border:1px solid var(--line); color:var(--ink); padding:8px 10px; border-radius:8px; font:inherit; }
+  button { background:var(--acc); color:#06201c; border:0; padding:9px 14px; border-radius:8px; font:inherit; font-weight:600; cursor:pointer; }
+  .verdict { border-radius:12px; padding:16px; margin:14px 0; border:1px solid var(--line); }
+  .verdict.admit { border-color:var(--ok); background:rgba(63,185,138,.08) }
+  .verdict.block { border-color:var(--bad); background:rgba(229,84,75,.08) }
+  .verdict.escalate { border-color:var(--warn); background:rgba(240,180,92,.08) }
+  .verdict .d { font-size:20px; font-weight:700; text-transform:uppercase; }
+  .verdict.admit .d{color:var(--ok)} .verdict.block .d{color:var(--bad)} .verdict.escalate .d{color:var(--warn)}
+  .cmp { display:flex; gap:24px; flex-wrap:wrap; margin-top:10px; }
+  .cmp div { font-size:13px; } .cmp b { font-size:18px; display:block; }
+  .viol { margin-top:8px; } .viol .h{color:var(--bad)} .viol .s{color:var(--warn)}
+  .rec { margin-top:10px; color:var(--acc); font-size:13px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; } th,td{ text-align:left; padding:6px 10px; border-bottom:1px solid var(--line);} th{color:var(--dim);font-size:11px;text-transform:uppercase}
+  .badge{font-size:11px;padding:1px 7px;border-radius:20px} .b-admit{background:rgba(63,185,138,.16);color:var(--ok)} .b-block{background:rgba(229,84,75,.15);color:var(--bad)} .b-escalate{background:rgba(240,180,92,.16);color:var(--warn)}
+  .hint { color:var(--dim); font-size:13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Twin-in-loop governor <small>— каждое действие сперва проигрывается на двойнике, потом допуск в прод</small></h1>
+</header>
+<main>
+  <p class="hint">Автономный управляющий предлагает действие (дозаказ, переоценка). Губернатор <b>не пускает его в прод сразу</b>: сперва прогоняет через цифровой двойник на горизонт, сравнивает прогноз с бездействием и допускает только при <b>безопасном и выгодном</b> исходе. Небезопасное — блокирует и рекомендует безопасную альтернативу; спорное — эскалирует человеку.</p>
+  <div class="cards" id="cards"></div>
+  <h2>Предложить действие</h2>
+  <div class="row">
+    <select id="type"><option value="reorder">дозаказ</option><option value="reprice">переоценка</option></select>
+    <select id="product"><option value="rose">Роза</option><option value="tulip">Тюльпан</option></select>
+    <span id="ql">кол-во</span> <input id="qty" type="number" value="25" style="width:90px" />
+    <span id="pl" style="display:none">новая цена</span> <input id="price" type="number" value="180" style="width:90px; display:none" />
+    <button id="go">Прогнать через двойник</button>
+  </div>
+  <div id="verdict"></div>
+  <h2>Журнал решений</h2>
+  <table id="log"><thead><tr><th>Действие</th><th>Решение</th><th>Прогноз (прибыль)</th><th>Причина</th></tr></thead><tbody></tbody></table>
+</main>
+<script>
+const $ = (s) => document.querySelector(s);
+$('#type').onchange = () => { const r = $('#type').value === 'reorder'; $('#ql').style.display=$('#qty').style.display=r?'':'none'; $('#pl').style.display=$('#price').style.display=r?'none':''; };
+async function refresh() {
+  const h = await (await fetch('/api/health')).json();
+  $('#cards').innerHTML =
+    `<div class="stat"><b>${h.total||0}</b><span>рассмотрено</span></div>` +
+    `<div class="stat"><b style="color:var(--ok)">${h.admit||0}</b><span>допущено</span></div>` +
+    `<div class="stat"><b style="color:var(--warn)">${h.escalate||0}</b><span>эскалировано</span></div>` +
+    `<div class="stat"><b style="color:var(--bad)">${h.block||0}</b><span>заблокировано</span></div>`;
+  const l = await (await fetch('/api/log')).json();
+  $('#log tbody').innerHTML = l.log.slice().reverse().map((e) => `<tr><td>${e.action.type} ${e.action.productId||''} ${e.action.quantity||e.action.newPrice||''}</td><td><span class="badge b-${e.decision}">${e.decision}</span></td><td>${e.simulated.profit} <span class="hint">(база ${e.baseline.profit})</span></td><td class="hint">${e.reason}</td></tr>`).join('');
+}
+function esc(s){return String(s).replace(/[&<>]/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}
+$('#go').onclick = async () => {
+  const type = $('#type').value;
+  const action = type === 'reorder' ? { type, productId: $('#product').value, quantity: Number($('#qty').value) } : { type, productId: $('#product').value, newPrice: Number($('#price').value) };
+  const ev = await (await fetch('/api/propose', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action }) })).json();
+  if (ev.error) { $('#verdict').innerHTML = `<div class="verdict block">${ev.error}</div>`; return; }
+  const viol = ev.violations.map((v)=>`<div class="${v.severity==='hard'?'h':'s'}">• [${v.severity}] ${v.code}: ${esc(v.detail)}</div>`).join('');
+  $('#verdict').innerHTML = `<div class="verdict ${ev.decision}"><div class="d">${ev.decision}</div><div class="hint">${esc(ev.reason)}</div>`
+    + `<div class="cmp"><div>прогноз прибыли<b>${ev.simulated.profit}</b></div><div>бездействие<b>${ev.baseline.profit}</b></div><div>uplift<b style="color:${ev.uplift>=0?'var(--ok)':'var(--bad)'}">${ev.uplift}</b></div><div>мин. кэш<b>${ev.simulated.minCash}</b></div><div>порча<b>${Math.round(ev.simulated.spoilageRate*100)}%</b></div><div>дефицит<b>${Math.round(ev.simulated.stockoutRate*100)}%</b></div></div>`
+    + (viol?`<div class="viol">${viol}</div>`:'')
+    + (ev.recommendation?`<div class="rec">💡 Рекомендация: ${JSON.stringify(ev.recommendation.action)} (прогноз ${ev.recommendation.profit})</div>`:'')
+    + `</div>`;
+  refresh();
+};
+refresh();
+</script>
+</body>
+</html>

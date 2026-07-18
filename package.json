@@ -1,0 +1,16 @@
+{
+  "name": "flower-shop-twin-governor",
+  "version": "1.0.0",
+  "description": "Twin-in-loop governor: замкнутый контур MPC-безопасности — каждое предложенное действие автономного управляющего прогоняется через цифровой двойник на симуляции, и губернатор допускает его в прод только при безопасном и выгодном прогнозе",
+  "private": true,
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.mjs"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "@anthropic-ai/sdk": "^0.65.0"
+  }
+}
