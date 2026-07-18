@@ -1,0 +1,500 @@
+# Единый стенд «магазин цветов»: семь живых уровней + самооптимизирующийся роутер
+# перед ними + AI-слой (витрина / управляющий / поиск) поверх роутера.
+#
+# Каждый сервис собирается из своей ветки-первоисточника (git build-context),
+# поэтому дублирования кода нет — этот файл и есть точка сборки всей системы.
+#
+# Профили:
+#   (по умолчанию)  L1–L5 + роутер + витрина + управляющий + поиск
+#   --profile full        добавляет L6 (Next.js + PostgreSQL + сид)
+#   --profile enterprise  добавляет L7 (микросервисы + RabbitMQ + PostgreSQL + nginx)
+#   --profile commerce    добавляет общие сервисы auth + payment
+#
+# REPO можно переопределить (напр. на локальный форк); по умолчанию — GitHub.
+# ANTHROPIC_API_KEY (необязательно) включает LLM-движки; без него — детерминированные.
+
+x-repo: &repo ${REPO:-https://github.com/svend4/daten2.git}
+
+services:
+  # ======================= ЖИВЫЕ УРОВНИ (L1–L5) =======================
+  level1:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/level1-php-GBpVR
+    ports: ["8081:80"]
+
+  level2:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/level2-flask-GBpVR
+    ports: ["8082:10000"]
+
+  level3:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/level3-django-GBpVR
+    environment:
+      PORT: "10000"
+    ports: ["8083:10000"]
+
+  level4:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/level4-express-GBpVR
+    environment:
+      PORT: "10000"
+    ports: ["8084:10000"]
+
+  level5:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/level5-react-flask-GBpVR
+    ports: ["8085:10000"]
+
+  # ======================= L6 (профиль full) =======================
+  l6-db:
+    image: postgres:16-alpine
+    profiles: ["full"]
+    environment:
+      POSTGRES_USER: flower
+      POSTGRES_PASSWORD: flower
+      POSTGRES_DB: flower_shop
+    volumes: ["l6-data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flower"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  l6-seed:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/level6-nextjs-GBpVR
+      target: builder
+    profiles: ["full"]
+    environment:
+      DATABASE_URL: postgresql://flower:flower@l6-db:5432/flower_shop?schema=public
+    command: sh -c "npx prisma db push --accept-data-loss --skip-generate && npx tsx prisma/seed.ts"
+    restart: "no"
+    depends_on:
+      l6-db:
+        condition: service_healthy
+
+  level6:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/level6-nextjs-GBpVR
+    profiles: ["full"]
+    environment:
+      DATABASE_URL: postgresql://flower:flower@l6-db:5432/flower_shop?schema=public
+      PORT: "10000"
+    ports: ["8086:10000"]
+    depends_on:
+      l6-db:
+        condition: service_healthy
+      l6-seed:
+        condition: service_completed_successfully
+
+  # ======================= L7 (профиль enterprise) =======================
+  l7-postgres:
+    image: postgres:15-alpine
+    profiles: ["enterprise"]
+    environment:
+      POSTGRES_DB: flower_shop
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - l7-data:/var/lib/postgresql/data
+      - ./stack/level7/db-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  l7-rabbitmq:
+    image: rabbitmq:3-management-alpine
+    profiles: ["enterprise"]
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  product-service:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/level7-enterprise-GBpVR:services/product-service
+    profiles: ["enterprise"]
+    environment:
+      PORT: "3001"
+      DATABASE_URL: postgresql://postgres:postgres@l7-postgres:5432/flower_shop
+    depends_on:
+      l7-postgres:
+        condition: service_healthy
+
+  order-service:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/level7-enterprise-GBpVR:services/order-service
+    profiles: ["enterprise"]
+    environment:
+      PORT: "8000"
+      DATABASE_URL: postgresql://postgres:postgres@l7-postgres:5432/flower_shop
+      RABBITMQ_URL: amqp://guest:guest@l7-rabbitmq:5672
+    depends_on:
+      l7-postgres:
+        condition: service_healthy
+      l7-rabbitmq:
+        condition: service_healthy
+
+  notification-service:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/level7-enterprise-GBpVR:services/notification-service
+    profiles: ["enterprise"]
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@l7-rabbitmq:5672
+    depends_on:
+      l7-rabbitmq:
+        condition: service_healthy
+
+  level7:
+    image: nginx:alpine
+    profiles: ["enterprise"]
+    volumes:
+      - ./stack/level7/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports: ["8087:80"]
+    depends_on:
+      - product-service
+      - order-service
+
+  # ======================= САМООПТИМИЗИРУЮЩИЙСЯ РОУТЕР =======================
+  router:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/ai-router-GBpVR
+    environment:
+      HEALTH_MS: "5000"
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ROUTER_BACKENDS: >-
+        [{"id":"level1","name":"PHP (L1)","url":"http://level1:80","cost":1},
+         {"id":"level2","name":"Flask (L2)","url":"http://level2:10000","cost":1},
+         {"id":"level3","name":"Django (L3)","url":"http://level3:10000","cost":2},
+         {"id":"level4","name":"Express (L4)","url":"http://level4:10000","cost":1},
+         {"id":"level5","name":"React+Flask (L5)","url":"http://level5:10000","cost":2},
+         {"id":"level6","name":"Next.js (L6)","url":"http://level6:10000","cost":3},
+         {"id":"level7","name":"Microservices (L7)","url":"http://level7:80","cost":3}]
+    ports: ["8080:8073"]
+    depends_on:
+      - level1
+      - level2
+      - level3
+      - level4
+      - level5
+
+  # ======================= AI-СЛОЙ (поверх роутера) =======================
+  storefront:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/ai-storefront-GBpVR
+    environment:
+      BACKEND_URL: http://router:8073
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8070:8070"]
+    depends_on: ["router"]
+
+  manager:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/ai-manager-GBpVR
+    environment:
+      BACKEND_URL: http://router:8073
+      POLL_MS: "3600000"
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8071:8071"]
+    depends_on: ["router"]
+
+  search:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/ai-search-GBpVR
+    environment:
+      BACKEND_URL: http://router:8073
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8072:8072"]
+    depends_on: ["router"]
+
+  observability:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/observability-GBpVR
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ROUTER_URL: http://router:8073
+      OBS_LEVELS: >-
+        [{"id":"level1","name":"PHP","url":"http://level1:80"},
+         {"id":"level2","name":"Flask","url":"http://level2:10000"},
+         {"id":"level3","name":"Django","url":"http://level3:10000"},
+         {"id":"level4","name":"Express","url":"http://level4:10000"},
+         {"id":"level5","name":"React+Flask","url":"http://level5:10000"},
+         {"id":"level6","name":"Next.js","url":"http://level6:10000"},
+         {"id":"level7","name":"Microservices","url":"http://level7:80"}]
+    ports: ["8074:8074"]
+    depends_on: ["router"]
+
+  twin:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/digital-twin-GBpVR
+    environment:
+      BACKEND_URL: http://router:8073
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8075:8075"]
+    depends_on: ["router"]
+
+  firewall:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/agent-firewall-GBpVR
+    environment:
+      BACKEND_URL: http://router:8073
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8076:8076"]
+    depends_on: ["router"]
+
+  autonomous:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/autonomous-manager-GBpVR
+    environment:
+      BACKEND_URL: http://router:8073
+      AUTO_DRY_RUN: "true"     # безопасно по умолчанию: только симуляция
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8077:8077"]
+    depends_on: ["router"]
+
+  market:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/agent-market-GBpVR
+    environment:
+      BACKEND_URL: http://router:8073
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8078:8078"]
+    depends_on: ["router"]
+
+  rag:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/rag-memory-GBpVR
+    environment:
+      BACKEND_URL: http://router:8073
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8079:8079"]
+    depends_on: ["router"]
+
+  vision:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/vision-GBpVR
+    environment:
+      BACKEND_URL: http://router:8073
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8088:8088"]
+    depends_on: ["router"]
+
+  distillation:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/distillation-GBpVR
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8089:8089"]
+
+  evals:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/evals-GBpVR
+    environment:
+      TARGET_URL: http://router:8073
+      CHAT_URL: http://storefront:8070
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8090:8090"]
+    depends_on: ["router", "storefront"]
+
+  agent-pact:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/agent-pact-GBpVR
+    environment:
+      AGENT_URL: http://storefront:8070
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8102:8102"]
+    depends_on: ["storefront"]
+
+  rosetta:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/rosetta-GBpVR
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ROSETTA_BACKENDS: >-
+        [{"name":"level1-php","url":"http://level1:80"},
+         {"name":"level2-flask","url":"http://level2:10000"},
+         {"name":"level3-django","url":"http://level3:10000"},
+         {"name":"level4-express","url":"http://level4:10000"},
+         {"name":"level5-react-flask","url":"http://level5:10000"}]
+    ports: ["8103:8103"]
+    depends_on: ["level1", "level2", "level3", "level4", "level5"]
+
+  ops-ledger:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/ops-ledger-GBpVR
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8104:8104"]
+
+  adversarial-twin:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/adversarial-twin-GBpVR
+    environment:
+      AGENT_URL: http://storefront:8070
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8105:8105"]
+    depends_on: ["storefront"]
+
+  a2a-settlement:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/a2a-settlement-GBpVR
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8106:8106"]
+
+  carbon-arbitrage:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/carbon-arbitrage-GBpVR
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8107:8107"]
+
+  plugin-marketplace:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/plugin-marketplace-GBpVR
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8108:8108"]
+
+  distill-deploy:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/distill-deploy-GBpVR
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8109:8109"]
+
+  twin-governor:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/twin-governor-GBpVR
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8110:8110"]
+
+  green-router:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/green-router-GBpVR
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ROUTER_BACKENDS: >-
+        [{"id":"level1","name":"PHP (L1)","url":"http://level1:80","cost":0.0008,"watts":12,"grid":300},
+         {"id":"level2","name":"Flask (L2)","url":"http://level2:10000","cost":0.0010,"watts":18,"grid":120},
+         {"id":"level4","name":"Express (L4)","url":"http://level4:10000","cost":0.0012,"watts":16,"grid":250},
+         {"id":"level5","name":"React+API (L5)","url":"http://level5:10000","cost":0.0020,"watts":22,"grid":60}]
+    ports: ["8093:8091"]
+    depends_on: ["level1", "level2", "level4", "level5"]
+
+  shadow-canary:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/shadow-canary-GBpVR
+    environment:
+      PRIMARY_URL: http://level1:80        # текущая версия
+      CANDIDATE_URL: http://level2:10000   # кандидат (демо diff двух реальных уровней)
+      MODE: shadow
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8094:8094"]
+    depends_on: ["level1", "level2"]
+
+  contract-cdc:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/contract-cdc-GBpVR
+    environment:
+      TARGET_URL: http://router:8073
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8095:8095"]
+    depends_on: ["router"]
+
+  chaos-harness:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/chaos-harness-GBpVR
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      CHAOS_TARGETS: >-
+        [{"id":"level1","name":"PHP (L1)","url":"http://level1:80"},
+         {"id":"level2","name":"Flask (L2)","url":"http://level2:10000"},
+         {"id":"level4","name":"Express (L4)","url":"http://level4:10000"},
+         {"id":"level5","name":"React+API (L5)","url":"http://level5:10000"}]
+    ports: ["8096:8096"]
+    depends_on: ["level1", "level2", "level4", "level5"]
+
+  event-bus:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/event-bus-GBpVR
+    environment:
+      BACKEND_URL: http://router:8073
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8097:8097"]
+    depends_on: ["router"]
+
+  property-tests:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/property-tests-GBpVR
+    environment:
+      TARGET_URL: http://router:8073
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8098:8098"]
+    depends_on: ["router"]
+
+  control-plane:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/control-plane-GBpVR
+    environment:
+      POLL_MS: "10000"
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8099:8099"]
+    depends_on: ["router"]
+
+  polyglot-benchmark:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/polyglot-benchmark-GBpVR
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      BENCH_STACKS: >-
+        [{"id":"level1","name":"L1 · PHP","language":"PHP 8.2","storage":"SQLite","watts":12,"url":"http://level1:80"},
+         {"id":"level2","name":"L2 · Flask","language":"Python 3.12","storage":"SQLite","watts":18,"url":"http://level2:10000"},
+         {"id":"level3","name":"L3 · Django","language":"Python 3.12","storage":"SQLite","watts":20,"url":"http://level3:10000"},
+         {"id":"level4","name":"L4 · Express","language":"Node.js 20","storage":"SQLite","watts":16,"url":"http://level4:10000"},
+         {"id":"level5","name":"L5 · React+API","language":"Python + JS","storage":"SQLite","watts":22,"url":"http://level5:10000"}]
+    ports: ["8100:8100"]
+    depends_on: ["level1", "level2", "level3", "level4", "level5"]
+
+  integrations:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/integrations-GBpVR
+    environment:
+      # без ключей — детерминированные mock-провайдеры; задайте для реальных:
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8101:8101"]
+
+  # ======================= ОБЩИЕ СЕРВИСЫ (профиль commerce) =======================
+  auth:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/gateway-router-GBpVR
+    profiles: ["commerce"]
+    command: ["node", "services/auth-service/server.js"]
+    environment:
+      PORT: "8091"
+      AUTH_SECRET: ${AUTH_SECRET:-change-me-in-prod}
+    ports: ["8091:8091"]
+
+  payment:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/gateway-router-GBpVR
+    profiles: ["commerce"]
+    command: ["node", "services/payment-service/server.js"]
+    environment:
+      PORT: "8092"
+      PAYMENT_PROVIDER: mock
+    ports: ["8092:8092"]
+
+volumes:
+  l6-data:
+  l7-data:

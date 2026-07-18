@@ -1,0 +1,51 @@
+name: validate docker-compose
+
+on:
+  push:
+    branches: [ "claude/flower-shop-seven-levels-GBpVR" ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Docker Compose version
+        run: docker compose version
+
+      - name: Validate base compose (default profile)
+        run: docker compose config --quiet
+
+      - name: Validate every profile combination
+        run: |
+          set -e
+          for p in full enterprise commerce; do
+            echo "== profile: $p =="
+            docker compose --profile "$p" config --quiet
+          done
+          echo "== all profiles together =="
+          docker compose --profile full --profile enterprise --profile commerce config --quiet
+
+      - name: Assert default services are exactly L1-L5 + router + AI layer
+        run: |
+          set -e
+          expected="a2a-settlement adversarial-twin agent-pact autonomous carbon-arbitrage chaos-harness contract-cdc control-plane distill-deploy distillation evals event-bus firewall green-router integrations level1 level2 level3 level4 level5 manager market observability ops-ledger plugin-marketplace polyglot-benchmark property-tests rag rosetta router search shadow-canary storefront twin twin-governor vision"
+          actual="$(docker compose config --services | sort | tr '\n' ' ' | sed 's/ *$//')"
+          echo "default services: $actual"
+          [ "$actual" = "$expected" ] || { echo "::error::default service set changed (got: $actual)"; exit 1; }
+
+      - name: Assert full set has all 47 services
+        run: |
+          set -e
+          count="$(docker compose --profile full --profile enterprise --profile commerce config --services | wc -l | tr -d ' ')"
+          echo "total services: $count"
+          [ "$count" = "47" ] || { echo "::error::expected 47 services, got $count"; exit 1; }
+
+      - name: Assert L7 mount files exist
+        run: |
+          set -e
+          test -f stack/level7/nginx.conf
+          test -f stack/level7/db-init.sql
+          echo "L7 mount files present"

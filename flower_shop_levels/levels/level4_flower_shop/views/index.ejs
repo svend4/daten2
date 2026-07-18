@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"/>
+  <title>Магазин цветов</title>
+  <link rel="stylesheet" href="/public/style.css"/>
+</head>
+<body>
+<div class="wrap">
+  <h1>🌹 Магазин цветов</h1>
+  <p class="muted">Уровень 4: Node.js + Express + EJS + SQLite</p>
+
+  <div class="grid">
+    <% products.forEach(p => { %>
+      <div class="card">
+        <h3><a href="/product/<%= p.id %>"><%= p.name %></a></h3>
+        <p><%= p.description %></p>
+        <div class="price"><%= Number(p.price).toFixed(2) %> €</div>
+
+        <form method="POST" action="/order">
+          <input type="hidden" name="product_id" value="<%= p.id %>"/>
+          <input name="name" placeholder="Ваше имя" required/>
+          <input name="phone" placeholder="Телефон (необязательно)"/>
+          <button type="submit">Заказать</button>
+        </form>
+      </div>
+    <% }) %>
+  </div>
+</div>
+</body>
+</html>

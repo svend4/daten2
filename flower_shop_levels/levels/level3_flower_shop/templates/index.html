@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"/>
+  <title>Магазин цветов</title>
+  <link rel="stylesheet" href="/static/style.css"/>
+</head>
+<body>
+<div class="wrap">
+  <h1>🌹 Магазин цветов</h1>
+  <p class="muted">Уровень 3: Django + админка.</p>
+
+  <div class="grid">
+    {% for p in products %}
+      <div class="card">
+        <div class="title">{{ p.name }}</div>
+        <div class="desc">{{ p.description }}</div>
+        <div class="price">{{ p.price }} €</div>
+
+        <form method="POST" action="{% url 'create_order' p.id %}">
+          {% csrf_token %}
+          <input name="name" placeholder="Ваше имя" required>
+          <input name="phone" placeholder="Телефон (необязательно)">
+          <button type="submit">Заказать</button>
+        </form>
+      </div>
+    {% empty %}
+      <p>Нет товаров. Добавьте их через админку: <code>/admin/</code></p>
+    {% endfor %}
+  </div>
+</div>
+</body>
+</html>
