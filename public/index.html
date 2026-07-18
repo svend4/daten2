@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Магазин цветов — цифровой двойник</title>
+<style>
+  :root{
+    --bg:#f4f6fb; --surface:#ffffff; --border:#e2e6f0; --ink:#1a2030; --soft:#556; --faint:#8790a4;
+    --accent:#3d5cc4; --accent-soft:#e3e9fb; --good:#1f7a4d; --bad:#b32424; --bot:#eef1f8;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; --mono:ui-monospace,monospace;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --bg:#101320; --surface:#181c2b; --border:#282f45; --ink:#e6eaf5; --soft:#a6afc6; --faint:#767f98;
+    --accent:#8aa0ee; --accent-soft:#1b2238; --good:#5cc98c; --bad:#e57373; --bot:#1d2336;
+  }}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);min-height:100vh}
+  header{padding:16px 22px;border-bottom:1px solid var(--border);background:var(--surface);display:flex;align-items:center;gap:10px}
+  header h1{font-size:18px;margin:0}
+  header .badge{font-size:11px;color:var(--faint);margin-left:auto;font-family:var(--mono)}
+  main{max-width:960px;margin:0 auto;padding:20px;display:grid;gap:16px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  button{padding:9px 15px;border:none;border-radius:10px;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;font-size:14px}
+  button.ghost{background:var(--accent-soft);color:var(--accent)}
+  label{font-size:13px;color:var(--soft);display:flex;gap:6px;align-items:center}
+  input{padding:7px 9px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--ink);font-size:14px;width:70px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px}
+  .card h2{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--soft)}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+  .kpi{background:var(--accent-soft);border-radius:10px;padding:12px}
+  .kpi .v{font-size:22px;font-weight:700;font-family:var(--mono)}
+  .kpi .l{font-size:12px;color:var(--soft);margin-top:2px}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--border)}
+  th{color:var(--soft);font-weight:600;font-size:12px;text-transform:uppercase}
+  .num{font-family:var(--mono)}
+  .bar{height:7px;border-radius:4px;background:var(--accent-soft);width:120px;overflow:hidden;display:inline-block;vertical-align:middle}
+  .bar>i{display:block;height:100%;background:var(--accent)}
+  svg{width:100%;height:90px;display:block}
+  .spark{stroke:var(--accent);fill:none;stroke-width:2}
+  .up{color:var(--good)} .down{color:var(--bad)}
+  .muted{color:var(--faint)}
+  .chat{display:flex;flex-direction:column;gap:10px}
+  #log{max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
+  .msg{max-width:88%;padding:9px 13px;border-radius:12px;white-space:pre-wrap;line-height:1.45;font-size:14px}
+  .msg.user{align-self:flex-end;background:var(--accent);color:#fff}
+  .msg.bot{align-self:flex-start;background:var(--bot)}
+  form{display:flex;gap:8px}
+  .chips{display:flex;gap:8px;flex-wrap:wrap}
+  .chip{font-size:13px;padding:6px 11px;border-radius:20px;background:var(--accent-soft);color:var(--accent);border:none;cursor:pointer;font-weight:500}
+</style>
+</head>
+<body>
+  <header>
+    <span style="font-size:22px">👥</span>
+    <h1>Цифровой двойник магазина</h1>
+    <span class="badge" id="engine"></span>
+  </header>
+  <main>
+    <div class="card">
+      <h2>Параметры прогона</h2>
+      <div class="row">
+        <label>Тиков <input id="ticks" class="num" type="number" value="24" min="1" max="500"></label>
+        <label>Посетителей/тик <input id="arrival" class="num" type="number" value="8" min="0" max="500"></label>
+        <label>Seed <input id="seed" class="num" type="number" value="42"></label>
+        <button onclick="simulate()">▶ Симуляция</button>
+        <button class="ghost" onclick="runLive()">⚡ Живой прогон (реальные заказы)</button>
+        <span class="muted" id="meta"></span>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <label>What-if: цена ×<input id="mult" class="num" type="number" value="1.2" step="0.1" min="0.1" max="5"></label>
+        <button class="ghost" onclick="whatif()">Сравнить с базой</button>
+        <span class="muted" id="wmeta"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Итоги</h2>
+      <div class="kpis" id="kpis"><span class="muted">Запустите симуляцию</span></div>
+      <svg id="spark" viewBox="0 0 300 90" preserveAspectRatio="none" style="margin-top:12px"></svg>
+      <div class="muted" style="font-size:12px">Выручка по тикам (суточная волна спроса)</div>
+    </div>
+
+    <div class="card">
+      <h2>Продажи по товарам и сегментам</h2>
+      <div class="row" style="align-items:flex-start;gap:24px">
+        <table style="flex:1"><thead><tr><th>Товар</th><th>Продано</th></tr></thead><tbody id="prods"></tbody></table>
+        <table style="flex:1"><thead><tr><th>Сегмент</th><th>Выручка</th><th>Конв.</th></tr></thead><tbody id="segs"></tbody></table>
+      </div>
+    </div>
+
+    <div class="card chat">
+      <h2>Спросить аналитика</h2>
+      <div id="log"></div>
+      <div class="chips">
+        <button class="chip" onclick="quick('Итоги прогона')">Итоги</button>
+        <button class="chip" onclick="quick('Выручка по сегментам')">Сегменты</button>
+        <button class="chip" onclick="quick('Бестселлеры')">Бестселлеры</button>
+        <button class="chip" onclick="quick('Что с what-if по цене?')">What-if</button>
+      </div>
+      <form id="f"><input id="m" placeholder="Спросите о конверсии, сегментах, ценах…" autocomplete="off" style="flex:1;width:auto"><button type="submit">➤</button></form>
+    </div>
+  </main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const sid = 'twin-' + Math.random().toString(36).slice(2);
+const money = (n) => Number(n).toFixed(2) + ' €';
+const body = () => ({ ticks:+$('ticks').value, arrivalRate:+$('arrival').value, seed:+$('seed').value });
+
+function kpis(t, extra){
+  const items = [
+    ['Посетители', t.arrivals],
+    ['Покупки', t.purchases],
+    ['Конверсия', Math.round(t.conversion_rate*100)+'%'],
+    ['Выручка', money(t.revenue)],
+    ['Средний чек', money(t.aov)],
+  ];
+  if(extra) items.push(extra);
+  $('kpis').innerHTML = items.map(([l,v])=>`<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
+}
+function spark(series){
+  if(!series||!series.length){ $('spark').innerHTML=''; return; }
+  const max = Math.max(1,...series.map(s=>s.revenue));
+  const pts = series.map((s,i)=>`${(i/(series.length-1||1))*300},${90-(s.revenue/max)*84-3}`).join(' ');
+  $('spark').innerHTML = `<polyline class="spark" points="${pts}"/>`;
+}
+function tables(d){
+  const u = [...(d.unitsByProduct||[])].sort((a,b)=>b.units-a.units);
+  const mu = Math.max(1,...u.map(x=>x.units));
+  $('prods').innerHTML = u.map(x=>`<tr><td>${x.name}</td><td class="num">${x.units} <span class="bar"><i style="width:${Math.round(x.units/mu*100)}%"></i></span></td></tr>`).join('');
+  const seg = Object.values(d.bySegment||{}).sort((a,b)=>b.revenue-a.revenue);
+  $('segs').innerHTML = seg.map(s=>`<tr><td>${s.name}</td><td class="num">${money(s.revenue)}</td><td class="num">${s.arrivals?Math.round(s.purchases/s.arrivals*100):0}%</td></tr>`).join('');
+}
+function render(d, extra){ kpis(d.totals,extra); spark(d.series); tables(d); }
+
+async function simulate(){
+  $('meta').textContent='моделирую…';
+  try{ const d=await (await fetch('/api/simulate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body())})).json();
+    if(d.error){$('meta').textContent='ошибка: '+d.error;return;} render(d); $('meta').textContent=`${d.params.ticks} тиков · seed ${d.params.seed}`; }
+  catch(e){ $('meta').textContent='ошибка сети'; }
+}
+async function runLive(){
+  $('meta').textContent='живой прогон…';
+  try{ const d=await (await fetch('/api/run-live',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body())})).json();
+    if(d.error){$('meta').textContent='ошибка: '+d.error;return;}
+    render(d,['Заказов на бэкенде', d.placed_orders]); $('meta').textContent=`оформлено ${d.placed_orders}, выручка бэкенда ${money(d.backend_revenue)}`; }
+  catch(e){ $('meta').textContent='ошибка сети'; }
+}
+async function whatif(){
+  $('wmeta').textContent='сравниваю…';
+  try{ const d=await (await fetch('/api/whatif',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...body(),multiplier:+$('mult').value})})).json();
+    if(d.error){$('wmeta').textContent='ошибка: '+d.error;return;}
+    const dr=d.delta_revenue, dc=Math.round(d.delta_conversion*100);
+    $('wmeta').innerHTML = `цена ×${d.multiplier}: выручка <b class="${dr>=0?'up':'down'}">${dr>=0?'+':''}${money(dr)}</b>, конверсия <b class="${dc>=0?'up':'down'}">${dc>=0?'+':''}${dc} п.п.</b>`; }
+  catch(e){ $('wmeta').textContent='ошибка сети'; }
+}
+
+function add(role,text){ const el=document.createElement('div'); el.className='msg '+role; el.textContent=text; $('log').appendChild(el); $('log').scrollTop=$('log').scrollHeight; return el; }
+async function ask(text){ add('user',text); const t=add('bot','…');
+  try{ const d=await (await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:sid,message:text})})).json();
+    t.textContent=d.reply||d.error||'(нет ответа)'; }catch(e){ t.textContent='Ошибка сети'; } }
+function quick(t){ ask(t); }
+$('f').addEventListener('submit',(e)=>{ e.preventDefault(); const v=$('m').value.trim(); if(!v)return; $('m').value=''; ask(v); });
+
+fetch('/api/health').then(r=>r.json()).then(d=>{ $('engine').textContent=(d.engine==='llm'?'Claude API':'rule-based')+' · '+d.backend; });
+</script>
+</body>
+</html>
