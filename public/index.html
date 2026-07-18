@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Магазин цветов — автономный управляющий</title>
+<style>
+  :root{
+    --bg:#f5f7f6; --surface:#fff; --border:#e2e8e5; --ink:#182220; --soft:#556; --faint:#8894a0;
+    --accent:#0f7a55; --accent-soft:#dcefe8; --warn:#b3771e; --bad:#b32424; --ok:#1f7a4d; --bot:#eef2f1;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; --mono:ui-monospace,monospace;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --bg:#0f1513; --surface:#161d1b; --border:#26302d; --ink:#e6eeeb; --soft:#a6b2ad; --faint:#74827c;
+    --accent:#4fc09a; --accent-soft:#15251f; --warn:#e0af5a; --bad:#e57373; --ok:#5cc98c; --bot:#1c2624;
+  }}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);min-height:100vh}
+  header{padding:16px 22px;border-bottom:1px solid var(--border);background:var(--surface);display:flex;align-items:center;gap:10px}
+  header h1{font-size:18px;margin:0}
+  header .badge{font-size:11px;color:var(--faint);margin-left:auto;font-family:var(--mono)}
+  main{max-width:900px;margin:0 auto;padding:20px;display:grid;gap:16px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  button{padding:9px 15px;border:none;border-radius:10px;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;font-size:14px}
+  button.ghost{background:var(--accent-soft);color:var(--accent)}
+  button.warn{background:var(--warn)} button.bad{background:var(--bad)} button.ok{background:var(--ok)}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px}
+  .card h2{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--soft)}
+  .mode{display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:14px}
+  .dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:5px}
+  .on{background:var(--ok)} .off{background:var(--bad)}
+  .pend{border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px;display:flex;gap:10px;align-items:center}
+  .pend .imp{font-family:var(--mono);font-size:12px;padding:2px 8px;border-radius:20px;background:var(--accent-soft);color:var(--warn)}
+  .grow{flex:1}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  td{padding:5px 6px;border-bottom:1px solid var(--border)}
+  .muted{color:var(--faint)}
+  .tag{font-size:11px;padding:2px 7px;border-radius:20px;background:var(--accent-soft)}
+  .chat{display:flex;flex-direction:column;gap:10px}
+  #log{max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
+  .msg{max-width:88%;padding:9px 13px;border-radius:12px;white-space:pre-wrap;line-height:1.45;font-size:14px}
+  .msg.user{align-self:flex-end;background:var(--accent);color:#fff}
+  .msg.bot{align-self:flex-start;background:var(--bot)}
+  form{display:flex;gap:8px}
+  input[type=text]{flex:1;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--ink);font-size:14px}
+</style>
+</head>
+<body>
+  <header>
+    <span style="font-size:22px">🤖</span>
+    <h1>Автономный управляющий</h1>
+    <span class="badge" id="engine"></span>
+  </header>
+  <main>
+    <div class="card">
+      <h2>Режим и предохранители</h2>
+      <div class="mode" id="mode">…</div>
+      <div class="row" style="margin-top:12px">
+        <button onclick="cycle()">▶ Прогнать цикл</button>
+        <button class="ghost" onclick="cycle(true)">Наблюдать + цикл</button>
+        <button class="ghost" id="dry" onclick="toggleDry()">Сухой прогон</button>
+        <button class="bad" id="kill" onclick="toggleKill()">⏸ Пауза</button>
+        <span class="muted" id="meta"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>На одобрении человека</h2>
+      <div id="pending"><span class="muted">—</span></div>
+    </div>
+
+    <div class="card">
+      <h2>Журнал действий (ledger)</h2>
+      <table id="ledger"></table>
+    </div>
+
+    <div class="card chat">
+      <h2>Спросить управляющего</h2>
+      <div id="log"></div>
+      <form id="f"><input type="text" id="m" placeholder="Что в очереди? что сделано? режим?" autocomplete="off"><button type="submit">➤</button></form>
+    </div>
+  </main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const sid = 'auto-' + Math.random().toString(36).slice(2);
+let cfg = {};
+
+async function refresh(){
+  const [s, c, p, l] = await Promise.all([
+    (await fetch('/api/state')).json(),
+    (await fetch('/api/config')).json(),
+    (await fetch('/api/pending')).json(),
+    (await fetch('/api/ledger')).json(),
+  ]);
+  cfg = c;
+  $('mode').innerHTML =
+    `<span><span class="dot ${s.paused?'off':'on'}"></span>${s.paused?'ПАУЗА':'работает'}</span>`+
+    `<span><span class="dot ${c.dryRun?'off':'on'}"></span>${c.dryRun?'сухой прогон':'реальное исполнение'}</span>`+
+    `<span class="muted">цикл ${s.cycle} · снимков ${s.snapshots} · выполнено ${s.executed} · в очереди ${s.pending}</span>`+
+    `<span class="muted">порог авто ≤${c.autoThreshold} · лимит ${c.maxActionsPerCycle}/цикл · cooldown ${c.cooldownCycles}</span>`;
+  $('dry').textContent = c.dryRun?'Включить исполнение':'Сухой прогон';
+  $('kill').textContent = s.paused?'▶ Возобновить':'⏸ Пауза';
+  $('kill').className = s.paused?'ok':'bad';
+  $('pending').innerHTML = p.pending.length ? p.pending.map(a=>`
+    <div class="pend"><span class="imp">impact ${Math.round(a.impact)}</span>
+      <div class="grow"><b>${a.type}</b> · ${a.name}<br><span class="muted">${a.rationale}</span></div>
+      <button class="ok" onclick="approve('${a.id}')">Одобрить</button>
+      <button class="warn" onclick="reject('${a.id}')">Отклонить</button>
+    </div>`).join('') : '<span class="muted">Очередь пуста</span>';
+  $('ledger').innerHTML = l.ledger.slice(-12).reverse().map(e=>`<tr>
+    <td><span class="tag">${e.at}${e.dryRun?'/сухой':''}</span></td><td>${e.action.type}</td>
+    <td>${e.action.name}</td><td class="muted">${e.result.effect||e.result.via}</td></tr>`).join('') || '<tr><td class="muted">—</td></tr>';
+}
+
+async function cycle(observe){ $('meta').textContent='…'; const d=await (await fetch('/api/cycle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({observe:!!observe})})).json();
+  $('meta').textContent = d.paused?'на паузе':(d.note||`предложено ${d.proposed}, авто ${d.auto_executed}, в очередь ${d.queued}`); refresh(); }
+async function approve(id){ await fetch('/api/approve/'+id,{method:'POST'}); refresh(); }
+async function reject(id){ await fetch('/api/reject/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({note:'через дашборд'})}); refresh(); }
+async function toggleDry(){ await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dryRun:!cfg.dryRun})}); refresh(); }
+async function toggleKill(){ const s=await (await fetch('/api/state')).json(); await fetch(s.paused?'/api/resume':'/api/pause',{method:'POST'}); refresh(); }
+
+function add(role,t){ const e=document.createElement('div'); e.className='msg '+role; e.textContent=t; $('log').appendChild(e); $('log').scrollTop=$('log').scrollHeight; return e; }
+$('f').addEventListener('submit',async(e)=>{ e.preventDefault(); const v=$('m').value.trim(); if(!v)return; $('m').value=''; add('user',v); const t=add('bot','…');
+  try{ const d=await (await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:sid,message:v})})).json(); t.textContent=d.reply||d.error; }catch(_){ t.textContent='Ошибка сети'; } });
+
+fetch('/api/health').then(r=>r.json()).then(d=>{ $('engine').textContent=(d.engine==='llm'?'Claude API':'rule-based')+' · '+d.backend; });
+refresh();
+</script>
+</body>
+</html>

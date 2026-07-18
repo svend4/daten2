@@ -1,0 +1,16 @@
+{
+  "name": "flower-shop-autonomous-manager",
+  "version": "1.0.0",
+  "description": "Автономный управляющий: замкнутая петля наблюдение→анализ→действие через единый контракт, с порогом эскалации человеку, лимитами, cooldown, kill-switch и аудитом",
+  "private": true,
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.mjs"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "@anthropic-ai/sdk": "^0.65.0"
+  }
+}
