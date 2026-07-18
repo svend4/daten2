@@ -1,0 +1,16 @@
+{
+  "name": "flower-shop-agent-firewall",
+  "version": "1.0.0",
+  "description": "Файрвол для ИИ-агентов с инструментами: защита от prompt-injection, злоупотребления вызовами инструментов и утечек — между недоверенным вводом покупателя и /api/orders",
+  "private": true,
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.mjs"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "@anthropic-ai/sdk": "^0.65.0"
+  }
+}
