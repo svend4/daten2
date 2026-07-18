@@ -77,6 +77,7 @@ MCP-адаптер. `docker-compose.yml` сводит всё в один жив�
 | **Авто-эвалы (LLM-judge)** | Контрактные и поведенческие эвал-кейсы + инварианты + scorecard + регрессии против baseline | 8090 | 17/17 | `claude/evals-GBpVR` |
 | **Green/FinOps-роутер** | Многокритериальный выбор уровня (латентность/€/CO₂/надёжность) + учёт денег/энергии/выбросов | 8093 | 13/13 | `claude/green-router-GBpVR` |
 | **Shadow/Canary** | Зеркалирование трафика на кандидат-версию, diff-тестирование, канареечный % с авто-откатом | 8094 | 11/11 | `claude/shadow-canary-GBpVR` |
+| **Контракт codegen + CDC** | Типизированные клиенты (JS/Python/TS) из спецификации + Pact-верификация уровней | 8095 | 15/15 | `claude/contract-cdc-GBpVR` |
 | **Капабилити-роутер + общие сервисы** | Статичный роутер по политике + **auth** и **payment** (один раз для всех) | 8081/8091/8092 | 22/22 | `claude/gateway-router-GBpVR` |
 | **MCP-сервер** | Адаптер Model Context Protocol — любой ИИ управляет магазином (4 инструмента, stdio) | — | ✓ | `claude/mcp-server-GBpVR` |
 
@@ -143,6 +144,7 @@ docker compose --profile full --profile enterprise --profile commerce up --build
 | http://localhost:8090 | Авто-эвалы · scorecard и регрессии |
 | http://localhost:8093 | Green/FinOps-роутер · веса латентность/€/CO₂ + учёт |
 | http://localhost:8094 | Shadow/Canary · diff-тестирование выката |
+| http://localhost:8095 | Контракт codegen + CDC · клиенты и Pact-верификация |
 | http://localhost:8081…8087 | Уровни L1…L7 напрямую (для отладки) |
 | http://localhost:8091 / 8092 | auth / payment (профиль commerce) |
 
@@ -150,7 +152,7 @@ docker compose --profile full --profile enterprise --profile commerce up --build
 
 | Профиль | Добавляет |
 |---------|-----------|
-| *(по умолчанию)* | L1–L5, роутер, витрина, управляющий, поиск, наблюдаемость, двойник, файрвол, автономный управляющий, рынок агентов, RAG+память, Vision, дистилляция, авто-эвалы, green-роутер, shadow/canary |
+| *(по умолчанию)* | L1–L5, роутер, витрина, управляющий, поиск, наблюдаемость, двойник, файрвол, автономный управляющий, рынок агентов, RAG+память, Vision, дистилляция, авто-эвалы, green-роутер, shadow/canary, контракт-CDC |
 | `full` | L6 (`l6-db` PostgreSQL, `l6-seed` разовый сид, `level6`) |
 | `enterprise` | L7 (`l7-postgres`, `l7-rabbitmq`, `product-service`, `order-service`, `notification-service`, `level7` nginx) |
 | `commerce` | `auth`, `payment` |
@@ -168,11 +170,11 @@ offline и маршрутизирует в остальные — это и де
 
 - **Каждый компонент** — собственный smoke-тест (реальный HTTP через границы
   процессов): роутер 12/12, витрина 19/19, управляющий 19/19, поиск 16/16,
-  наблюдаемость 19/19, двойник 16/16, файрвол 18/18, автономный управляющий 21/21, рынок агентов 15/15, RAG+память 16/16, Vision 13/13, дистилляция 15/15, авто-эвалы 17/17, green-роутер 13/13, shadow/canary 11/11, контракт (gateway) 22/22, MCP — реальный stdio JSON-RPC.
+  наблюдаемость 19/19, двойник 16/16, файрвол 18/18, автономный управляющий 21/21, рынок агентов 15/15, RAG+память 16/16, Vision 13/13, дистилляция 15/15, авто-эвалы 17/17, green-роутер 13/13, shadow/canary 11/11, контракт-CDC 15/15, контракт (gateway) 22/22, MCP — реальный stdio JSON-RPC.
 - **Оркестрация** — живой прогон в контейнерах подтвердил сквозной путь
   **витрина → роутер → живой уровень** (диалоговый заказ приземляется на уровень) и
   **failover на лету** (остановка выбранного уровня → трафик уходит на следующий).
-- **Compose** — `docker compose config` валиден для всех профилей (31 сервис); CI
+- **Compose** — `docker compose config` валиден для всех профилей (32 сервиса); CI
   проверяет это на каждом пуше.
 
 > Примечание: полная сборка образов **языковых** уровней в песочнице-CI невозможна
@@ -207,6 +209,7 @@ offline и маршрутизирует в остальные — это и де
 | `claude/evals-GBpVR` | Авто-эвалы и LLM-as-judge: scorecard, инварианты, регрессии |
 | `claude/green-router-GBpVR` | Green/FinOps-роутер: многокритериальный выбор + учёт €/энергии/CO₂ |
 | `claude/shadow-canary-GBpVR` | Shadow/Canary: зеркалирование, diff-тестирование, авто-откат |
+| `claude/contract-cdc-GBpVR` | Контракт codegen + CDC (Pact): типизированные клиенты + верификация уровней |
 | `claude/gateway-router-GBpVR` | Капабилити-роутер + общие auth/payment |
 | `claude/mcp-server-GBpVR` | MCP-адаптер (ИИ управляет магазином) |
 | `claude/flower-shop-seven-levels-GBpVR` | **Этот стенд**: исходники 7 уровней + `docker-compose.yml` + обзор |

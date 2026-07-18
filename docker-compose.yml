@@ -327,6 +327,15 @@ services:
     ports: ["8094:8094"]
     depends_on: ["level1", "level2"]
 
+  contract-cdc:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/contract-cdc-GBpVR
+    environment:
+      TARGET_URL: http://router:8073
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8095:8095"]
+    depends_on: ["router"]
+
   # ======================= ОБЩИЕ СЕРВИСЫ (профиль commerce) =======================
   auth:
     build:
