@@ -367,6 +367,15 @@ services:
     ports: ["8098:8098"]
     depends_on: ["router"]
 
+  control-plane:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/control-plane-GBpVR
+    environment:
+      POLL_MS: "10000"
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8099:8099"]
+    depends_on: ["router"]
+
   # ======================= ОБЩИЕ СЕРВИСЫ (профиль commerce) =======================
   auth:
     build:
