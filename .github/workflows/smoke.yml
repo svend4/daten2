@@ -18,5 +18,7 @@ jobs:
         run: |
           node --check server.js
           node --check registry.js
+          node --check services/auth-service/server.js
+          node --check services/payment-service/server.js
       - name: Smoke test (mock backend + routing)
         run: npm test

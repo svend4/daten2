@@ -11,4 +11,10 @@ const LEVELS = [
   { level: 7, stack: 'Microservices', url: process.env.LEVEL7_URL || 'http://localhost:8007' },
 ];
 
-module.exports = { LEVELS };
+// Общие сервисы за роутером (реализованы один раз для всей системы).
+const SERVICES = {
+  auth: process.env.AUTH_URL || 'http://localhost:8091',
+  payment: process.env.PAYMENT_URL || 'http://localhost:8092',
+};
+
+module.exports = { LEVELS, SERVICES };

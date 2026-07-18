@@ -3,7 +3,7 @@
 // и маршрутизирует запросы по единому контракту на выбранный уровень.
 const express = require('express');
 const path = require('path');
-const { LEVELS } = require('./registry');
+const { LEVELS, SERVICES } = require('./registry');
 
 const app = express();
 app.use(express.json());
@@ -61,7 +61,29 @@ async function forward(res, target, pathname, init) {
 
 // --- служебные эндпоинты роутера ---
 app.get('/gateway/health', async (_, res) => res.json(await healthAll()));
-app.get('/gateway/config', (_, res) => res.json({ defaultLevel: DEFAULT_LEVEL, levels: LEVELS }));
+app.get('/gateway/config', (_, res) => res.json({ defaultLevel: DEFAULT_LEVEL, levels: LEVELS, services: SERVICES }));
+
+// --- общие сервисы: auth и payment (реализованы один раз, а не на каждом уровне) ---
+async function proxyService(req, res, base) {
+  try {
+    const init = { method: req.method, headers: {} };
+    if (req.headers.authorization) init.headers.Authorization = req.headers.authorization;
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      init.headers['Content-Type'] = 'application/json';
+      init.body = JSON.stringify(req.body || {});
+    }
+    const r = await fetch(base + req.originalUrl, init);
+    const body = await r.text();
+    res.status(r.status);
+    res.set('Content-Type', r.headers.get('content-type') || 'application/json');
+    res.send(body);
+  } catch {
+    res.status(502).json({ error: 'service unavailable' });
+  }
+}
+
+app.all('/api/auth/*', (req, res) => proxyService(req, res, SERVICES.auth));
+app.all('/api/payments/*', (req, res) => proxyService(req, res, SERVICES.payment));
 
 // --- проксируемый единый контракт (?level=N для явного пина) ---
 app.get('/api/products', async (req, res) => {

@@ -32,3 +32,21 @@ npm test   # мок-бэкенд по контракту + проверка аг
 Заказ живёт в БД создавшего уровня, поэтому чтение `/api/orders/<token>`
 требует `?level=N` того же уровня. Дашборд делает это автоматически
 (запоминает `X-Served-By-Level`).
+
+## Общие сервисы за роутером (реализованы один раз)
+Вместо повторения авторизации и оплаты на каждом уровне — два общих сервиса,
+на которые роутер проксирует:
+
+- **auth-service** (`services/auth-service`) — `/api/auth/register|login|me|verify`
+  (scrypt-хэш паролей, подписанные HMAC-токены). Роутер: `/api/auth/*`.
+- **payment-service** (`services/payment-service`) — `/api/payments/intent|confirm|:order`
+  (подключаемый провайдер mock/stripe). Роутер: `/api/payments/*`.
+
+Запуск (каждый — свой процесс):
+```bash
+PORT=8091 node services/auth-service/server.js
+PORT=8092 node services/payment-service/server.js
+AUTH_URL=http://localhost:8091 PAYMENT_URL=http://localhost:8092 npm start
+```
+Так авторизация и оплата существуют **один раз для всей системы**, а любой из 7
+уровней/фронтендов делегирует им через роутер по единому контракту.
