@@ -1,0 +1,16 @@
+{
+  "name": "flower-shop-ai-search",
+  "version": "1.0.0",
+  "description": "Семантический поиск и рекомендации по каталогу цветов: запрос на естественном языке → векторный поиск по смысловым осям — через единый контракт магазина",
+  "private": true,
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.mjs"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "@anthropic-ai/sdk": "^0.65.0"
+  }
+}
