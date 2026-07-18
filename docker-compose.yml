@@ -277,6 +277,15 @@ services:
     ports: ["8079:8079"]
     depends_on: ["router"]
 
+  vision:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/vision-GBpVR
+    environment:
+      BACKEND_URL: http://router:8073
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8088:8088"]
+    depends_on: ["router"]
+
   # ======================= ОБЩИЕ СЕРВИСЫ (профиль commerce) =======================
   auth:
     build:
