@@ -22,3 +22,15 @@ jobs:
           node --check services/payment-service/server.js
       - name: Smoke test (mock backend + routing)
         run: npm test
+
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Contract test against reference backend
+        run: |
+          node contract-test/mock-backend.mjs & sleep 1
+          BACKEND_URL=http://localhost:8100 node contract-test/run.mjs
