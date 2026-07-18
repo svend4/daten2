@@ -303,6 +303,15 @@ services:
     ports: ["8090:8090"]
     depends_on: ["router", "storefront"]
 
+  agent-pact:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/agent-pact-GBpVR
+    environment:
+      AGENT_URL: http://storefront:8070
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8102:8102"]
+    depends_on: ["storefront"]
+
   green-router:
     build:
       context: ${REPO:-https://github.com/svend4/daten2.git}#claude/green-router-GBpVR
