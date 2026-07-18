@@ -1,0 +1,16 @@
+{
+  "name": "flower-shop-integrations",
+  "version": "1.0.0",
+  "description": "Реальные интеграции через адаптеры: платежи (Stripe) и эмбеддинги (Voyage) с реальным провайдером при наличии ключа и детерминированным mock-фолбэком без ключа/сети",
+  "private": true,
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.mjs"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "@anthropic-ai/sdk": "^0.65.0"
+  }
+}
