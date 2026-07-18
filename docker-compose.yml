@@ -390,6 +390,16 @@ services:
     ports: ["8100:8100"]
     depends_on: ["level1", "level2", "level3", "level4", "level5"]
 
+  integrations:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/integrations-GBpVR
+    environment:
+      # без ключей — детерминированные mock-провайдеры; задайте для реальных:
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8101:8101"]
+
   # ======================= ОБЩИЕ СЕРВИСЫ (профиль commerce) =======================
   auth:
     build:
