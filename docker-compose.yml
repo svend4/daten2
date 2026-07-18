@@ -333,6 +333,15 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     ports: ["8104:8104"]
 
+  adversarial-twin:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/adversarial-twin-GBpVR
+    environment:
+      AGENT_URL: http://storefront:8070
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8105:8105"]
+    depends_on: ["storefront"]
+
   green-router:
     build:
       context: ${REPO:-https://github.com/svend4/daten2.git}#claude/green-router-GBpVR
