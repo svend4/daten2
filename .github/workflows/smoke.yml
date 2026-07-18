@@ -21,6 +21,7 @@ jobs:
           import api  # инициализирует БД из канонической схемы при импорте
           api.app.config['TESTING'] = True
           c = api.app.test_client()
+          assert c.get('/api/health').get_json()['level']==5, 'health'
           r = c.get('/api/products')
           assert r.status_code == 200 and isinstance(r.get_json(), list), 'каталог API'
           r = c.post('/api/orders', json={'name': 'CI', 'phone': '0', 'email': 'a@b.c',

@@ -40,6 +40,11 @@ def serve_static(path):
 
 # ---------- API ----------
 
+@app.get('/api/health')
+def api_health():
+    return jsonify({'ok': True, 'level': 5, 'stack': 'React+Flask'})
+
+
 @app.get('/api/products')
 def products():
     db = get_db()
