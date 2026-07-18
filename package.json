@@ -1,0 +1,16 @@
+{
+  "name": "flower-shop-plugin-marketplace",
+  "version": "1.0.0",
+  "description": "Backend-plugin marketplace: реестр сменных бэкендов-уровней с манифестами, гейтом соответствия контракту (живая проверка health/products/orders) и router-совместимым каталогом сертифицированных бэкендов для авто-регистрации",
+  "private": true,
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.mjs"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "@anthropic-ai/sdk": "^0.65.0"
+  }
+}

@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Backend-plugin marketplace</title>
+<style>
+  :root { --bg:#0c0f14; --card:#141922; --line:#232c38; --ink:#e7edf4; --dim:#8a97a6; --ok:#3fb98a; --bad:#e5544b; --acc:#6ea8fe; --warn:#f0b45c; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.5 system-ui,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+  header { padding:22px 26px; border-bottom:1px solid var(--line); }
+  h1 { margin:0; font-size:19px; } h1 small { color:var(--dim); font-weight:400; font-size:13px; }
+  main { max-width:1000px; margin:0 auto; padding:22px 26px 60px; display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  @media(max-width:800px){ main{grid-template-columns:1fr} }
+  .full { grid-column:1/-1; }
+  .cards { display:flex; gap:12px; flex-wrap:wrap; margin:0 0 6px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 16px; min-width:100px; }
+  .stat b { font-size:22px; display:block; } .stat span { color:var(--dim); font-size:12px; }
+  h2 { font-size:14px; text-transform:uppercase; letter-spacing:.04em; color:var(--dim); margin:8px 0 10px; }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; }
+  label { display:block; font-size:12px; color:var(--dim); margin:8px 0 3px; }
+  input,textarea { width:100%; background:#0a0e13; border:1px solid var(--line); color:var(--ink); padding:8px 10px; border-radius:8px; font:inherit; }
+  textarea { min-height:60px; font-family:ui-monospace,monospace; font-size:13px; }
+  button { background:var(--acc); color:#0a1020; border:0; padding:9px 16px; border-radius:8px; font:inherit; font-weight:600; cursor:pointer; margin-top:10px; }
+  button.ghost { background:transparent; color:var(--ink); border:1px solid var(--line); padding:4px 10px; margin:0; font-size:12px; }
+  .plugin { border:1px solid var(--line); border-radius:10px; padding:10px 14px; margin-bottom:10px; }
+  .plugin .top { display:flex; justify-content:space-between; align-items:center; }
+  .plugin b { font-size:15px; } .plugin .stack { color:var(--dim); font-size:12px; }
+  .ver { font-size:12px; margin-top:4px; color:var(--dim); }
+  .badge { font-size:11px; padding:1px 7px; border-radius:20px; } .badge.ok{background:rgba(63,185,138,.15);color:var(--ok)} .badge.bad{background:rgba(229,84,75,.15);color:var(--bad)} .badge.yank{background:rgba(240,180,92,.15);color:var(--warn)}
+  .checks { font-family:ui-monospace,monospace; font-size:12px; color:var(--dim); margin-top:6px; }
+  .log { font-family:ui-monospace,monospace; font-size:12.5px; white-space:pre-wrap; color:var(--dim); }
+  .hint { color:var(--dim); font-size:13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Backend-plugin marketplace <small>— реестр сменных бэкендов с гейтом соответствия контракту</small></h1>
+</header>
+<main>
+  <p class="full hint">Система держится на «контракт — граница»: уровни взаимозаменяемы. Маркетплейс формализует это: любой может опубликовать бэкенд-плагин с манифестом; мы <b>живой пробой</b> проверяем соответствие контракту (health/products/orders) и допускаем в каталог только сертифицированные. Роутер забирает <code>/api/catalog</code> и авто-регистрирует их.</p>
+  <div class="cards full" id="cards"></div>
+  <div class="panel">
+    <h2 style="margin-top:0">Опубликовать плагин</h2>
+    <label>манифест (JSON)</label>
+    <textarea id="man">{
+  "id": "acme-php",
+  "name": "Acme PHP backend",
+  "version": "1.0.0",
+  "url": "http://localhost:8081",
+  "stack": "PHP",
+  "cost": 0.001,
+  "regions": ["eu-north"],
+  "capabilities": ["orders", "products"]
+}</textarea>
+    <button id="pub">Опубликовать (пройти гейт)</button>
+    <div class="log" id="log" style="margin-top:12px">—</div>
+  </div>
+  <div class="panel">
+    <h2 style="margin-top:0">Реестр</h2>
+    <div id="plugins"></div>
+    <h2>Каталог для роутера</h2>
+    <div class="log" id="catalog">—</div>
+  </div>
+</main>
+<script>
+const $ = (s) => document.querySelector(s);
+function logLine(t) { $('#log').textContent = t + '\n' + $('#log').textContent; }
+async function refresh() {
+  const st = await (await fetch('/api/health')).json();
+  $('#cards').innerHTML =
+    `<div class="stat"><b>${st.plugins}</b><span>плагинов</span></div>` +
+    `<div class="stat"><b style="color:var(--ok)">${st.certified}</b><span>сертифицировано</span></div>` +
+    `<div class="stat"><b style="color:var(--bad)">${st.rejected}</b><span>отклонено</span></div>` +
+    `<div class="stat"><b style="color:var(--warn)">${st.yanked}</b><span>отозвано</span></div>` +
+    `<div class="stat"><b>${st.catalogSize}</b><span>в каталоге</span></div>`;
+  const pl = await (await fetch('/api/plugins')).json();
+  $('#plugins').innerHTML = pl.plugins.map((p) => `<div class="plugin"><div class="top"><div><b>${p.id}</b> <span class="stack">${p.active?p.active.manifest.stack:'—'}</span></div>${p.active?`<span class="badge ok">активна ${p.active.version}</span>`:'<span class="badge bad">нет активной</span>'}</div>${p.versions.map((v)=>`<div class="ver">v${v.version} <span class="badge ${v.yanked?'yank':(v.state==='certified'?'ok':'bad')}">${v.yanked?'отозвана':v.state}</span> score ${v.score??'—'} ${v.state==='certified'&&!v.yanked?`<button class="ghost" onclick="yank('${p.id}','${v.version}')">yank</button>`:''}</div>`).join('')}</div>`).join('') || '<span class="hint">пусто</span>';
+  const cat = await (await fetch('/api/catalog')).json();
+  $('#catalog').textContent = cat.backends.length ? cat.backends.map((b)=>`${b.id}@${b.version} → ${b.url} (${b.stack})`).join('\n') : 'пусто';
+}
+window.yank = async (id, version) => { await fetch(`/api/plugins/${id}/yank`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ version }) }); refresh(); };
+$('#pub').onclick = async () => {
+  let man; try { man = JSON.parse($('#man').value); } catch (e) { return logLine('плохой JSON: ' + e.message); }
+  const r = await (await fetch('/api/plugins', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(man) })).json();
+  if (r.state === 'certified') logLine(`✓ ${r.id}@${r.version} сертифицирован (score ${r.score})`);
+  else if (r.reason === 'manifest') logLine(`✗ манифест: ${(r.errors||[]).join('; ')}`);
+  else logLine(`✗ не прошёл контракт: ${(r.checks||[]).filter(c=>!c.ok).map(c=>c.name+' ('+c.detail+')').join('; ')}`);
+  refresh();
+};
+refresh();
+</script>
+</body>
+</html>
