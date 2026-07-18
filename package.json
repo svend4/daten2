@@ -1,0 +1,16 @@
+{
+  "name": "flower-shop-adversarial-twin",
+  "version": "1.0.0",
+  "description": "Adversarial twin: coverage-guided эволюционный red-team, который ИЩЕТ сценарии, ломающие ИИ-агента/политику (а не симулирует нормальный спрос) — эволюционный поиск по пространству атак с фитнес-функцией по нарушениям",
+  "private": true,
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.mjs"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "@anthropic-ai/sdk": "^0.65.0"
+  }
+}

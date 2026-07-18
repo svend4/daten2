@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Adversarial twin · эволюционный red-team</title>
+<style>
+  :root { --bg:#0f0d10; --card:#191419; --line:#2c2330; --ink:#efe6ef; --dim:#a08fa6; --ok:#3fb98a; --bad:#e5544b; --acc:#d16ba5; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.5 system-ui,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+  header { padding:22px 26px; border-bottom:1px solid var(--line); }
+  h1 { margin:0; font-size:19px; } h1 small { color:var(--dim); font-weight:400; font-size:13px; }
+  main { max-width:980px; margin:0 auto; padding:22px 26px 60px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px; }
+  input { flex:1; min-width:200px; background:var(--card); border:1px solid var(--line); color:var(--ink); padding:9px 12px; border-radius:8px; font:inherit; }
+  button { background:var(--acc); color:#1a0f16; border:0; padding:9px 16px; border-radius:8px; font:inherit; font-weight:600; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:default; }
+  .cards { display:flex; gap:12px; flex-wrap:wrap; margin:6px 0 20px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 16px; min-width:120px; }
+  .stat b { font-size:24px; display:block; } .stat span { color:var(--dim); font-size:12px; }
+  .meter { height:12px; border-radius:6px; background:#0a0e14; overflow:hidden; margin:2px 0 20px; }
+  .meter > div { height:100%; }
+  h2 { font-size:14px; text-transform:uppercase; letter-spacing:.04em; color:var(--dim); margin:22px 0 10px; }
+  .exploit { background:var(--card); border:1px solid var(--bad); border-radius:10px; padding:12px 16px; margin:10px 0; }
+  .exploit .t { font-weight:700; } .exploit .cat { font-size:12px; color:var(--dim); }
+  .exploit .msg { color:var(--acc); margin:6px 0 2px; } .exploit .rep { color:var(--dim); }
+  .exploit code { background:#0a0e14; padding:1px 6px; border-radius:5px; }
+  .clean { background:rgba(63,185,138,.1); border:1px solid var(--ok); color:#a7e6cd; padding:14px 16px; border-radius:10px; }
+  .spark { display:flex; gap:3px; align-items:flex-end; height:44px; margin-bottom:8px; }
+  .spark > div { flex:1; background:var(--acc); border-radius:2px 2px 0 0; min-height:2px; }
+  .hint { color:var(--dim); font-size:13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Adversarial twin <small>— coverage-guided эволюционный red-team ИИ-агента</small></h1>
+</header>
+<main>
+  <p class="hint">Не симулирует нормальный спрос, а <b>ищет</b> сценарии, которые ломают агента: эволюционный поиск по пространству атак (веса тактик × интенсивность), фитнес = число найденных нарушений. Каждое поколение мутирует к более разрушительным атакам и накапливает покрытие.</p>
+  <div class="row">
+    <input id="agent" placeholder="URL агента (напр. http://localhost:8070)" />
+    <button id="hunt">Запустить охоту</button>
+  </div>
+  <div class="cards" id="cards"></div>
+  <div class="meter" id="meter" style="display:none"><div></div></div>
+  <div class="spark" id="spark"></div>
+  <h2>Найденные эксплойты</h2>
+  <div id="exploits"></div>
+  <p class="hint" id="empty">Запустите охоту, чтобы увидеть найденные пробои и устойчивость агента.</p>
+</main>
+<script>
+const $ = (s) => document.querySelector(s);
+function stat(v, l, cls) { return `<div class="stat"><b class="${cls||''}">${v}</b><span>${l}</span></div>`; }
+function esc(s) { return String(s).replace(/[&<>]/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;' }[c])); }
+function render(r) {
+  $('#empty').style.display = 'none';
+  const robustPct = Math.round(r.robustness * 100);
+  $('#cards').innerHTML =
+    stat(robustPct + '%', 'устойчивость', r.robustness >= 0.8 ? 'ok' : 'bad') +
+    stat(`${r.distinctBroken}/${r.totalTactics}`, 'классов атак пробито', r.distinctBroken ? 'bad' : 'ok') +
+    stat(r.generations, 'поколений поиска', '') +
+    stat(r.bestFitness, 'пик фитнеса', '');
+  const m = $('#meter'); m.style.display = 'block'; m.firstElementChild.style.width = robustPct + '%';
+  m.firstElementChild.style.background = r.robustness >= 0.8 ? 'var(--ok)' : 'var(--bad)';
+  const maxB = Math.max(...r.trace.map((t) => t.brokenSoFar), 1);
+  $('#spark').innerHTML = r.trace.map((t) => `<div title="поколение ${t.gen}: покрытие ${t.brokenSoFar}" style="height:${Math.max(6, (t.brokenSoFar / maxB) * 100)}%"></div>`).join('');
+  if (!r.exploits.length) { $('#exploits').innerHTML = `<div class="clean">✓ Эволюционный поиск не нашёл пробоев за ${r.generations} поколений — агент устойчив.</div>`; return; }
+  $('#exploits').innerHTML = r.exploits.map((e) => `<div class="exploit"><span class="t">${e.tactic}</span> <span class="cat">· ${e.category} · интенсивность ${Math.round(e.intensity*100)/100}</span><div>${esc(e.evidence)}</div><div class="msg">атака: <code>${esc(e.message)}</code></div><div class="rep">ответ: «${esc(e.reply)}»</div></div>`).join('');
+}
+$('#hunt').onclick = async () => {
+  const btn = $('#hunt'); btn.disabled = true; btn.textContent = 'Ищу атаки…';
+  try { const r = await (await fetch('/api/hunt', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ agentUrl: $('#agent').value.trim() || undefined }) })).json();
+    if (r.error) { $('#empty').textContent = 'Ошибка: ' + r.error; $('#empty').style.display=''; } else render(r);
+  } catch (e) { $('#empty').textContent = 'Ошибка сети: ' + e.message; }
+  btn.disabled = false; btn.textContent = 'Запустить охоту';
+};
+(async () => { try { const h = await (await fetch('/api/health')).json(); $('#agent').value = h.agent || ''; } catch {} })();
+</script>
+</body>
+</html>
