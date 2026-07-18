@@ -1,0 +1,16 @@
+{
+  "name": "flower-shop-ai-manager",
+  "version": "1.0.0",
+  "description": "ИИ-управляющий: следит за остатками, прогнозирует спрос, подсказывает цены, ловит аномалии, готовит дозаказы — через единый контракт магазина",
+  "private": true,
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.mjs"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "@anthropic-ai/sdk": "^0.65.0"
+  }
+}

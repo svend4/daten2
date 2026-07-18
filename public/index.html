@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Магазин цветов — ИИ-управляющий</title>
+<style>
+  :root{
+    --bg:#f5f6f8; --surface:#ffffff; --border:#e3e6ea; --ink:#1c2330; --soft:#586074; --faint:#8a91a2;
+    --accent:#2f6f5b; --accent-soft:#e3f0eb; --warn:#b3541e; --danger:#b32424; --bot:#eef1f4;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; --mono:ui-monospace,monospace;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --bg:#12151a; --surface:#1a1e25; --border:#2b323d; --ink:#e7ecf3; --soft:#aab3c2; --faint:#788191;
+    --accent:#6cc0a2; --accent-soft:#1d2a26; --warn:#e0975a; --danger:#e57373; --bot:#222831;
+  }}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);min-height:100vh}
+  header{padding:16px 22px;border-bottom:1px solid var(--border);background:var(--surface);display:flex;align-items:center;gap:10px}
+  header h1{font-size:18px;margin:0}
+  header .badge{font-size:11px;color:var(--faint);margin-left:auto;font-family:var(--mono)}
+  main{max-width:960px;margin:0 auto;padding:20px;display:grid;gap:18px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  button{padding:9px 15px;border:none;border-radius:10px;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;font-size:14px}
+  button.ghost{background:var(--accent-soft);color:var(--accent)}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px}
+  .card h2{margin:0 0 10px;font-size:15px}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--border)}
+  th{color:var(--soft);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.03em}
+  .tag{font-size:12px;padding:2px 8px;border-radius:20px;font-weight:600}
+  .tag.reorder{background:var(--accent-soft);color:var(--warn)}
+  .tag.hold{color:var(--faint)}
+  .tag.raise{color:var(--accent)}
+  .tag.discount{color:var(--warn)}
+  .anom{color:var(--danger);font-weight:600}
+  .muted{color:var(--faint)}
+  #summary{font-size:14px;line-height:1.5}
+  .chat{display:flex;flex-direction:column;gap:10px}
+  #log{max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
+  .msg{max-width:85%;padding:9px 13px;border-radius:12px;white-space:pre-wrap;line-height:1.45;font-size:14px}
+  .msg.user{align-self:flex-end;background:var(--accent);color:#fff}
+  .msg.bot{align-self:flex-start;background:var(--bot)}
+  .chips{display:flex;gap:8px;flex-wrap:wrap}
+  .chip{font-size:13px;padding:6px 11px;border-radius:20px;background:var(--accent-soft);color:var(--accent);border:none;cursor:pointer;font-weight:500}
+  form{display:flex;gap:8px}
+  input{flex:1;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--ink);font-size:14px}
+  .num{font-family:var(--mono)}
+</style>
+</head>
+<body>
+  <header>
+    <span style="font-size:22px">📊</span>
+    <h1>ИИ-управляющий магазина цветов</h1>
+    <span class="badge" id="engine"></span>
+  </header>
+  <main>
+    <div class="row">
+      <button onclick="snap()">📸 Снимок каталога</button>
+      <button class="ghost" onclick="refresh()">Обновить отчёт</button>
+      <span class="muted" id="meta"></span>
+    </div>
+
+    <div class="card"><h2>Сводка</h2><div id="summary" class="muted">Загрузка…</div></div>
+
+    <div class="card">
+      <h2>Товары</h2>
+      <table><thead><tr>
+        <th>Товар</th><th>Остаток</th><th>Спрос/сут</th><th>Хватит</th><th>Дозаказ</th><th>Цена</th><th>Аномалии</th>
+      </tr></thead><tbody id="rows"><tr><td colspan="7" class="muted">Нет данных</td></tr></tbody></table>
+    </div>
+
+    <div class="card chat">
+      <h2>Спросить управляющего</h2>
+      <div id="log"></div>
+      <div class="chips">
+        <button class="chip" onclick="quick('Что дозаказать?')">Что дозаказать?</button>
+        <button class="chip" onclick="quick('Есть аномалии?')">Аномалии</button>
+        <button class="chip" onclick="quick('Что с ценами?')">Цены</button>
+        <button class="chip" onclick="quick('Прогноз по остаткам')">Прогноз</button>
+      </div>
+      <form id="f"><input id="m" placeholder="Спросите об остатках, спросе, ценах…" autocomplete="off" /><button type="submit">➤</button></form>
+    </div>
+  </main>
+
+<script>
+const sid = 'mgr-' + Math.random().toString(36).slice(2);
+const $ = (id) => document.getElementById(id);
+const money = (n) => Number(n).toFixed(2) + ' €';
+
+async function snap(){
+  $('meta').textContent = 'снимаю…';
+  try{ const d = await (await fetch('/api/snapshot',{method:'POST'})).json();
+    $('meta').textContent = d.error ? ('ошибка: '+d.error) : `снимков: ${d.snapshots}`; refresh(); }
+  catch(e){ $('meta').textContent = 'ошибка сети'; }
+}
+
+async function refresh(){
+  const r = await (await fetch('/api/report')).json();
+  $('summary').textContent = r.summary || '—';
+  const tb = $('rows');
+  if(!r.products || !r.products.length){ tb.innerHTML = '<tr><td colspan="7" class="muted">Нет данных — сделайте снимок</td></tr>'; return; }
+  tb.innerHTML = r.products.map(p=>{
+    const ps = p.price_suggestion;
+    const priceTag = ps.action==='hold' ? `<span class="tag hold">${money(p.price)}</span>`
+      : `<span class="tag ${ps.action}">${money(ps.from)}→${money(ps.to)}</span>`;
+    const reorder = p.needsReorder ? `<span class="tag reorder">+${p.reorderQty}</span>` : '<span class="muted">—</span>';
+    const anom = p.anomalies.length ? `<span class="anom">${p.anomalies.map(a=>a.type).join(', ')}</span>` : '<span class="muted">—</span>';
+    return `<tr><td>${p.name}${p.is_featured?' ★':''}</td><td class="num">${p.stock}</td>
+      <td class="num">${p.dailyRate}</td><td class="num">${p.daysToStockout===null?'∞':p.daysToStockout+' дн'}</td>
+      <td>${reorder}</td><td>${priceTag}</td><td>${anom}</td></tr>`;
+  }).join('');
+}
+
+function add(role,text){ const d=document.createElement('div'); d.className='msg '+role; d.textContent=text; $('log').appendChild(d); $('log').scrollTop=$('log').scrollHeight; return d; }
+async function ask(text){
+  add('user',text); const t=add('bot','…');
+  try{ const d=await (await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:sid,message:text})})).json();
+    t.textContent = d.reply || d.error || '(нет ответа)'; }
+  catch(e){ t.textContent='Ошибка сети'; }
+}
+function quick(t){ ask(t); }
+$('f').addEventListener('submit',(e)=>{ e.preventDefault(); const v=$('m').value.trim(); if(!v)return; $('m').value=''; ask(v); });
+
+fetch('/api/health').then(r=>r.json()).then(d=>{
+  $('engine').textContent = (d.engine==='llm'?'Claude API':'rule-based') + ' · ' + d.backend;
+});
+refresh();
+</script>
+</body>
+</html>
