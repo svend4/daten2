@@ -1,0 +1,16 @@
+{
+  "name": "flower-shop-rag-memory",
+  "version": "1.0.0",
+  "description": "RAG + память: база знаний магазина (уход/поводы/доставка/политика) с извлечением и пер-клиентская память для персонализации и рекомендаций — поверх единого контракта",
+  "private": true,
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.mjs"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "@anthropic-ai/sdk": "^0.65.0"
+  }
+}
