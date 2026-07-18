@@ -44,5 +44,13 @@ jobs:
           assert o.payment_status == 'pending', 'payment_status'
           assert o.items.first().line_total == o.total_amount, 'снимок позиции'
           assert OrderStatusHistory.objects.count() == 1, 'история статусов'
-          print('Каталог + богатая схема OK ✓')
+          # единый JSON API-контракт
+          import json
+          assert c.get('/api/health').json()['level'] == 3, 'health'
+          assert isinstance(c.get('/api/products').json(), list), 'api products'
+          ro = c.post('/api/orders', data=json.dumps({'name':'CI','phone':'0','items':[{'product_id':pid,'quantity':1}]}), content_type='application/json')
+          assert ro.status_code == 201, 'api create order'
+          tok = ro.json()['order_number']
+          assert c.get(f'/api/orders/{tok}').json()['order']['payment_status'] == 'pending', 'api get order'
+          print('Каталог + богатая схема + единый API OK ✓')
           PY
