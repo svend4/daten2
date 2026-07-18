@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Магазин цветов — control-plane</title>
+<style>
+  :root{
+    --bg:#f4f6f8; --surface:#fff; --border:#e3e6ea; --ink:#18202a; --soft:#556; --faint:#8794a0;
+    --accent:#2f6f5b; --accent-soft:#e3f0eb; --up:#1f7a4d; --down:#b32424; --llm:#6a3fb0;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; --mono:ui-monospace,monospace;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --bg:#10151a; --surface:#18202a; --border:#28323d; --ink:#e6edf3; --soft:#a7b4c0; --faint:#76828f;
+    --accent:#5cb8d6; --accent-soft:#152730; --up:#5cc98c; --down:#e57373; --llm:#b18ce6;
+  }}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);min-height:100vh}
+  header{padding:16px 22px;border-bottom:1px solid var(--border);background:var(--surface);display:flex;align-items:center;gap:12px}
+  header h1{font-size:18px;margin:0}
+  header .stat{margin-left:auto;font-family:var(--mono);font-size:13px}
+  main{max-width:1080px;margin:0 auto;padding:20px;display:grid;gap:18px}
+  .cat h2{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--soft);margin:0 0 10px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+  .svc{display:block;text-decoration:none;color:inherit;background:var(--surface);border:1px solid var(--border);border-left:5px solid var(--down);border-radius:12px;padding:13px 15px;transition:transform .1s}
+  .svc:hover{transform:translateY(-2px)}
+  .svc.up{border-left-color:var(--up)}
+  .svc .n{font-weight:600;font-size:15px;display:flex;align-items:center;gap:8px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--down)}
+  .svc.up .dot{background:var(--up)}
+  .svc .m{font-size:12px;color:var(--faint);margin-top:5px;display:flex;gap:8px;flex-wrap:wrap}
+  .tag{font-size:11px;padding:1px 7px;border-radius:20px;background:var(--accent-soft);color:var(--accent)}
+  .tag.llm{color:var(--llm)}
+  .bar{display:inline-block;width:60px;height:6px;border-radius:4px;background:var(--accent-soft);vertical-align:middle;overflow:hidden}
+  .bar>i{display:block;height:100%;background:var(--up)}
+  button{padding:8px 14px;border:none;border-radius:9px;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;font-size:14px}
+</style>
+</head>
+<body>
+  <header>
+    <span style="font-size:22px">🎛️</span>
+    <h1>Магазин цветов · control-plane</h1>
+    <button onclick="refresh()">⟳ Обновить</button>
+    <span class="stat" id="stat">…</span>
+  </header>
+  <main id="main"></main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+async function refresh(){
+  $('stat').textContent='опрос…';
+  const d = await (await fetch('/api/status')).json();
+  $('stat').innerHTML = `<b style="color:${d.down?'var(--down)':'var(--up)'}">${d.up}/${d.total}</b> онлайн`;
+  const cats = {};
+  d.services.forEach(s=>{ (cats[s.cat]=cats[s.cat]||[]).push(s); });
+  $('main').innerHTML = Object.entries(cats).map(([cat,list])=>{
+    const c = d.byCat[cat];
+    return `<div class="cat"><h2>${cat} <span style="color:var(--faint)">${c.up}/${c.total}</span> <span class="bar"><i style="width:${Math.round(c.up/c.total*100)}%"></i></span></h2>
+      <div class="grid">${list.map(s=>`
+        <a class="svc ${s.up?'up':''}" href="${s.dash}" target="_blank">
+          <div class="n"><span class="dot"></span>${s.name}</div>
+          <div class="m"><span class="tag ${s.engine==='llm'?'llm':''}">${s.up?(s.engine||'up'):'offline'}</span>${s.up?`<span>${s.ms} мс</span>`:''}</div>
+        </a>`).join('')}</div></div>`;
+  }).join('');
+}
+refresh();
+setInterval(refresh, 10000);
+</script>
+</body>
+</html>

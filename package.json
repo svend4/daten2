@@ -1,0 +1,16 @@
+{
+  "name": "flower-shop-control-plane",
+  "version": "1.0.0",
+  "description": "Control-plane (портал): единая точка входа со статусом здоровья всех сервисов стенда, агрегацией по категориям и ссылками на дашборды",
+  "private": true,
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.mjs"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "@anthropic-ai/sdk": "^0.65.0"
+  }
+}
