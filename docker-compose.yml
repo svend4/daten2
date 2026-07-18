@@ -356,6 +356,13 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     ports: ["8107:8107"]
 
+  plugin-marketplace:
+    build:
+      context: ${REPO:-https://github.com/svend4/daten2.git}#claude/plugin-marketplace-GBpVR
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8108:8108"]
+
   green-router:
     build:
       context: ${REPO:-https://github.com/svend4/daten2.git}#claude/green-router-GBpVR
