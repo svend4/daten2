@@ -21,6 +21,10 @@ def init_db(force=False):
         )
     conn.executescript(_read('schema.sql'))
     conn.executescript(_read('seed.sql'))
+    # Расширение уровня L5: auth-таблицы (если файл присутствует)
+    auth_path = os.path.join(HERE, 'auth.sql')
+    if os.path.exists(auth_path):
+        conn.executescript(_read('auth.sql'))
     conn.commit()
     conn.close()
 

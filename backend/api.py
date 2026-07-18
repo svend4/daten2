@@ -1,5 +1,7 @@
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
+from werkzeug.security import generate_password_hash, check_password_hash
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 import sqlite3
 import os
 import uuid
@@ -9,6 +11,27 @@ import init_db
 init_db.init_db()
 
 app = Flask(__name__, static_folder='static', static_url_path='')
+
+# --- авторизация (пила коммерции L5): токены на основе SECRET_KEY ---
+SECRET_KEY = os.environ.get('SECRET_KEY', 'insecure-dev-key-change-in-production')
+_serializer = URLSafeTimedSerializer(SECRET_KEY, salt='auth')
+TOKEN_MAX_AGE = 7 * 24 * 3600  # 7 дней
+
+
+def make_token(user_id):
+    return _serializer.dumps({'uid': user_id})
+
+
+def current_user(db):
+    """Возвращает строку пользователя по заголовку Authorization: Bearer <token>."""
+    auth = request.headers.get('Authorization', '')
+    if not auth.startswith('Bearer '):
+        return None
+    try:
+        data = _serializer.loads(auth[7:], max_age=TOKEN_MAX_AGE)
+    except (BadSignature, SignatureExpired):
+        return None
+    return db.execute('SELECT id, email, name FROM users WHERE id = ?', (data.get('uid'),)).fetchone()
 
 # CORS ограничен явными origin'ами (по умолчанию только тот же origin).
 # Список через запятую в CORS_ORIGINS; в single-service деплое фронт и API — один origin.
@@ -107,6 +130,12 @@ def create_order():
             'SELECT id FROM orders WHERE order_number = ?', (order_number,)
         ).fetchone()['id']
 
+        # Если запрос авторизован — привязываем заказ к пользователю
+        user = current_user(db)
+        if user:
+            db.execute('INSERT OR IGNORE INTO user_orders (user_id, order_id) VALUES (?, ?)',
+                       (user['id'], order_id))
+
         for pid, pname, qty, unit_price, line_total in priced:
             db.execute(
                 '''INSERT INTO order_items
@@ -148,6 +177,72 @@ def get_order(order_number):
     ).fetchall()
     db.close()
     return jsonify({'order': dict(order), 'items': [dict(i) for i in items]})
+
+
+# ---------- авторизация (пила коммерции L5) ----------
+
+@app.post('/api/auth/register')
+def auth_register():
+    data = request.get_json(force=True, silent=True) or {}
+    email = (data.get('email') or '').strip().lower()
+    password = data.get('password') or ''
+    name = (data.get('name') or '').strip()
+    if not email or len(password) < 6:
+        return jsonify({'error': 'email и пароль (мин. 6 символов) обязательны'}), 400
+    db = get_db()
+    try:
+        cur = db.execute(
+            'INSERT INTO users (email, password_hash, name) VALUES (?, ?, ?)',
+            (email, generate_password_hash(password), name)
+        )
+        db.commit()
+        uid = cur.lastrowid
+    except sqlite3.IntegrityError:
+        db.close()
+        return jsonify({'error': 'email уже зарегистрирован'}), 409
+    db.close()
+    return jsonify({'token': make_token(uid), 'user': {'email': email, 'name': name}}), 201
+
+
+@app.post('/api/auth/login')
+def auth_login():
+    data = request.get_json(force=True, silent=True) or {}
+    email = (data.get('email') or '').strip().lower()
+    password = data.get('password') or ''
+    db = get_db()
+    row = db.execute('SELECT id, email, name, password_hash FROM users WHERE email = ?', (email,)).fetchone()
+    db.close()
+    if not row or not check_password_hash(row['password_hash'], password):
+        return jsonify({'error': 'неверные email или пароль'}), 401
+    return jsonify({'token': make_token(row['id']), 'user': {'email': row['email'], 'name': row['name']}})
+
+
+@app.get('/api/auth/me')
+def auth_me():
+    db = get_db()
+    user = current_user(db)
+    db.close()
+    if not user:
+        return jsonify({'error': 'unauthorized'}), 401
+    return jsonify({'email': user['email'], 'name': user['name']})
+
+
+@app.get('/api/auth/orders')
+def auth_orders():
+    """История заказов текущего пользователя (только свои — защита от чужих)."""
+    db = get_db()
+    user = current_user(db)
+    if not user:
+        db.close()
+        return jsonify({'error': 'unauthorized'}), 401
+    rows = db.execute(
+        '''SELECT o.order_number, o.total_amount, o.status, o.payment_status, o.created_at
+           FROM orders o JOIN user_orders uo ON uo.order_id = o.id
+           WHERE uo.user_id = ? ORDER BY o.id DESC''',
+        (user['id'],)
+    ).fetchall()
+    db.close()
+    return jsonify([dict(r) for r in rows])
 
 
 if __name__ == '__main__':
