@@ -1,0 +1,16 @@
+{
+  "name": "flower-shop-chaos-harness",
+  "version": "1.0.0",
+  "description": "Chaos-харнесс: инъекция задержек/ошибок/падений в уровни и автопроверка гипотез SLO при failover — непрерывный chaos-тест устойчивости",
+  "private": true,
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.mjs"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "@anthropic-ai/sdk": "^0.65.0"
+  }
+}

@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Магазин цветов — chaos-харнесс</title>
+<style>
+  :root{
+    --bg:#f6f5f4; --surface:#fff; --border:#e6e2df; --ink:#221f1c; --soft:#556; --faint:#8b837c;
+    --accent:#b3541e; --accent-soft:#f6e6db; --ok:#1f7a4d; --bad:#b32424; --down:#b32424;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; --mono:ui-monospace,monospace;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --bg:#161311; --surface:#1e1a17; --border:#332c27; --ink:#eee6df; --soft:#b6aaa0; --faint:#867a70;
+    --accent:#e0975a; --accent-soft:#2a1d13; --ok:#5cc98c; --bad:#e57373; --down:#e57373;
+  }}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);min-height:100vh}
+  header{padding:16px 22px;border-bottom:1px solid var(--border);background:var(--surface);display:flex;align-items:center;gap:10px}
+  header h1{font-size:18px;margin:0}
+  header .badge{font-size:11px;color:var(--faint);margin-left:auto;font-family:var(--mono)}
+  main{max-width:900px;margin:0 auto;padding:20px;display:grid;gap:16px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px}
+  .card h2{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--soft)}
+  .targets{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+  .tgt{border:1px solid var(--border);border-radius:12px;padding:12px}
+  .tgt .n{font-weight:600}
+  .tgt.down{border-color:var(--down)}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
+  button{padding:7px 12px;border:none;border-radius:9px;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;font-size:13px}
+  button.ghost{background:var(--accent-soft);color:var(--accent)}
+  button.big{padding:10px 16px;font-size:14px}
+  input{padding:6px 8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--ink);font-size:13px;width:70px}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  td,th{text-align:left;padding:7px 8px;border-bottom:1px solid var(--border)}
+  th{color:var(--soft);font-size:12px;text-transform:uppercase}
+  .pill{font-size:12px;font-weight:700;padding:2px 9px;border-radius:20px}
+  .p-ok{background:var(--accent-soft);color:var(--ok)} .p-bad{background:#f6dede;color:var(--bad)}
+  @media (prefers-color-scheme:dark){.p-bad{background:#2a1414}}
+  .muted{color:var(--faint);font-size:13px}
+</style>
+</head>
+<body>
+  <header>
+    <span style="font-size:22px">🌪️</span>
+    <h1>Chaos-харнесс · устойчивость</h1>
+    <span class="badge" id="engine"></span>
+  </header>
+  <main>
+    <div class="card">
+      <h2>Уровни · инъекция сбоев</h2>
+      <div class="targets" id="targets"></div>
+    </div>
+    <div class="card">
+      <h2>Chaos-эксперименты (гипотезы SLO)</h2>
+      <div class="row">
+        <button class="big" onclick="run()">▶ Прогнать эксперименты</button>
+        <span class="muted">запросов<input id="reqs" type="number" value="40"></span>
+        <span class="muted" id="summary"></span>
+      </div>
+      <table><thead><tr><th>Эксперимент</th><th>Доступность</th><th>p95</th><th>SLO</th><th>Итог</th></tr></thead><tbody id="rows"><tr><td colspan="5" class="muted">Запустите прогон</td></tr></tbody></table>
+    </div>
+  </main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+async function loadTargets(){
+  const d = await (await fetch('/api/targets')).json();
+  $('targets').innerHTML = d.targets.map(t=>`<div class="tgt ${t.fault.down?'down':''}" id="t_${t.id}">
+    <div class="n">${t.name} ${t.fault.down?'<span class="pill p-bad">DOWN</span>':'<span class="pill p-ok">up</span>'}</div>
+    <div class="muted">latency ${t.fault.latencyMs}мс · errors ${Math.round(t.fault.errorRate*100)}%</div>
+    <div class="row">
+      <button class="ghost" onclick="fault('${t.id}',{down:${!t.fault.down}})">${t.fault.down?'Поднять':'Уронить'}</button>
+      <button class="ghost" onclick="fault('${t.id}',{latencyMs:${t.fault.latencyMs?0:150}})">${t.fault.latencyMs?'Убрать лаг':'+150мс'}</button>
+      <button class="ghost" onclick="fault('${t.id}',{errorRate:${t.fault.errorRate?0:0.5}})">${t.fault.errorRate?'Без ошибок':'50% ошибок'}</button>
+    </div></div>`).join('');
+}
+async function fault(id,patch){ await fetch('/api/faults/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(patch)}); loadTargets(); }
+async function run(){
+  $('summary').textContent='гоняю хаос…';
+  const d = await (await fetch('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({requests:+$('reqs').value})})).json();
+  $('summary').innerHTML = `<b style="color:${d.allPass?'var(--ok)':'var(--bad)'}">${d.allPass?'✓ устойчивость подтверждена':'✗ есть отклонения'}</b> — ${d.passed}/${d.total}`;
+  $('rows').innerHTML = d.results.map(r=>`<tr>
+    <td>${r.name}</td><td class="mono">${Math.round(r.metrics.successRate*100)}%</td><td class="mono">${r.metrics.p95??'—'} мс</td>
+    <td>${r.held?'<span class="pill p-ok">держится</span>':'<span class="pill p-bad">нарушен</span>'}</td>
+    <td><span class="pill ${r.pass?'p-ok':'p-bad'}">${r.pass?'как ожидалось':'ОТКЛОНЕНИЕ'}</span></td></tr>`).join('');
+  loadTargets();
+}
+fetch('/api/health').then(r=>r.json()).then(d=>{ $('engine').textContent=(d.engine==='llm'?'Claude':'rule-based')+' · '+d.targets+' уровней'; });
+loadTargets();
+</script>
+</body>
+</html>
