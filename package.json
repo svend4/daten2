@@ -1,0 +1,16 @@
+{
+  "name": "flower-shop-a2a-settlement",
+  "version": "1.0.0",
+  "description": "A2A settlement: атомарный расчётный слой для сделок агент-агенту — двойная запись с сохранением денег, эскроу (reserve→capture/release) и saga-атомарный многоплечевой клиринг с идемпотентностью и реверсом",
+  "private": true,
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.mjs"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "@anthropic-ai/sdk": "^0.65.0"
+  }
+}

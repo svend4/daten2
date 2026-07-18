@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>A2A settlement · атомарный расчётный слой</title>
+<style>
+  :root { --bg:#0c110f; --card:#141b18; --line:#22302a; --ink:#e6f2ec; --dim:#8ba699; --ok:#3fb98a; --bad:#e5544b; --acc:#4fd1a5; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.5 system-ui,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+  header { padding:22px 26px; border-bottom:1px solid var(--line); }
+  h1 { margin:0; font-size:19px; } h1 small { color:var(--dim); font-weight:400; font-size:13px; }
+  main { max-width:960px; margin:0 auto; padding:22px 26px 60px; }
+  .cards { display:flex; gap:12px; flex-wrap:wrap; margin:6px 0 20px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 16px; min-width:130px; }
+  .stat b { font-size:24px; display:block; } .stat span { color:var(--dim); font-size:12px; }
+  h2 { font-size:14px; text-transform:uppercase; letter-spacing:.04em; color:var(--dim); margin:22px 0 10px; }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px; }
+  label { display:block; font-size:12px; color:var(--dim); margin:8px 0 3px; }
+  input,textarea { width:100%; background:#0a0f0d; border:1px solid var(--line); color:var(--ink); padding:8px 10px; border-radius:8px; font:inherit; }
+  textarea { min-height:64px; font-family:ui-monospace,monospace; font-size:13px; }
+  button { background:var(--acc); color:#06140f; border:0; padding:9px 16px; border-radius:8px; font:inherit; font-weight:600; cursor:pointer; margin-top:10px; }
+  button.ghost { background:transparent; color:var(--ink); border:1px solid var(--line); }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th,td { text-align:left; padding:8px 12px; border-bottom:1px solid var(--line); } th { color:var(--dim); font-size:12px; text-transform:uppercase; }
+  tr:last-child td { border-bottom:0; } td.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .badge { font-size:12px; padding:2px 8px; border-radius:20px; } .badge.ok { background:rgba(63,185,138,.15); color:var(--ok); } .badge.bad { background:rgba(229,84,75,.15); color:var(--bad); }
+  .hint { color:var(--dim); font-size:13px; } .log { font-family:ui-monospace,monospace; font-size:12.5px; white-space:pre-wrap; color:var(--dim); }
+</style>
+</head>
+<body>
+<header>
+  <h1>A2A settlement <small>— атомарный расчётный слой для сделок агент-агенту (эскроу · двойная запись · saga)</small></h1>
+</header>
+<main>
+  <p class="hint">После того как агенты договорились (см. рынок агентов), расчёт должен пройти <b>атомарно</b>: все плечи или ни одного. Двойная запись гарантирует сохранение массы денег, эскроу резервирует средства до поставки, идемпотентность защищает от двойного списания при ретраях, реверс возвращает средства по спору.</p>
+  <div class="cards" id="cards"></div>
+  <h2>Инварианты</h2>
+  <div class="panel" id="inv"></div>
+  <div style="display:flex; gap:16px; flex-wrap:wrap">
+    <div class="panel" style="flex:1; min-width:280px">
+      <h2 style="margin-top:0">Провести расчёт</h2>
+      <label>id (идемпотентность)</label><input id="sid" value="deal-1" />
+      <label>плечи legs (JSON)</label><textarea id="legs">[{"from":"buyer","to":"escrow","amount":300},{"from":"escrow","to":"seller","amount":300}]</textarea>
+      <label><input type="checkbox" id="deliver" checked style="width:auto"> поставка подтверждена</label>
+      <button id="settle">Settle (атомарно)</button>
+      <button id="reverse" class="ghost">Reverse deal</button>
+    </div>
+    <div class="panel" style="flex:1; min-width:280px">
+      <h2 style="margin-top:0">Счета</h2>
+      <table id="accts"><thead><tr><th>Счёт</th><th class="num">Баланс</th><th class="num">Резерв</th><th class="num">Доступно</th></tr></thead><tbody></tbody></table>
+      <div style="margin-top:10px"><label>новый счёт</label><input id="newacc" placeholder="agentC:1000" /><button id="open" class="ghost">Открыть</button></div>
+    </div>
+  </div>
+  <h2>Журнал</h2>
+  <div class="panel log" id="log">—</div>
+</main>
+<script>
+const $ = (s) => document.querySelector(s);
+async function seed() { for (const [id, initial] of [['buyer',1000],['seller',0],['escrow',0],['platform',0]]) await fetch('/api/accounts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,initial})}); }
+async function refresh() {
+  const a = await (await fetch('/api/accounts')).json();
+  $('#accts tbody').innerHTML = a.accounts.map((x) => `<tr><td>${x.id}</td><td class="num">${x.balance}</td><td class="num">${x.held}</td><td class="num">${x.available}</td></tr>`).join('');
+  const inv = await (await fetch('/api/verify-invariants')).json();
+  $('#inv').innerHTML = `<span class="badge ${inv.ok?'ok':'bad'}">${inv.ok?'все инварианты держатся':'НАРУШЕНИЕ'}</span> &nbsp; масса денег <b>${inv.total}</b> (${inv.conserved?'сохранена':'нарушена'}) · овердрафтов нет: ${inv.noOverdraft?'да':'НЕТ'} · активных резервов: ${inv.activeHolds}`;
+  const s = await (await fetch('/api/settlements')).json();
+  $('#cards').innerHTML = `<div class="stat"><b>${inv.total}</b><span>масса денег (сохраняется)</span></div><div class="stat"><b class="${inv.ok?'':'bad'}">${inv.ok?'✓':'⚠'}</b><span>инварианты</span></div><div class="stat"><b>${s.byState.settled||0}</b><span>settled</span></div><div class="stat"><b>${s.byState.aborted||0}</b><span>aborted</span></div>`;
+}
+function logLine(t) { $('#log').textContent = t + '\n' + $('#log').textContent; }
+$('#settle').onclick = async () => {
+  let legs; try { legs = JSON.parse($('#legs').value); } catch (e) { return logLine('плохой JSON: ' + e.message); }
+  const r = await (await fetch('/api/settle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:$('#sid').value,legs,deliver:$('#deliver').checked})})).json();
+  logLine(`settle ${$('#sid').value}: ${r.settlement.state}${r.settlement.reason?' ('+r.settlement.reason+')':''} · инварианты ${r.invariants.ok?'✓':'⚠'}`); refresh();
+};
+$('#reverse').onclick = async () => { const r = await (await fetch('/api/reverse',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({settlementId:$('#sid').value})})).json(); logLine(`reverse ${$('#sid').value}: ${r.result.state||r.result.error}`); refresh(); };
+$('#open').onclick = async () => { const [id, initial] = $('#newacc').value.split(':'); if (!id) return; await fetch('/api/accounts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id.trim(),initial:Number(initial)||0})}); refresh(); };
+(async () => { const a = await (await fetch('/api/accounts')).json(); if (!a.accounts.length) await seed(); refresh(); })();
+</script>
+</body>
+</html>
