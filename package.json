@@ -1,0 +1,16 @@
+{
+  "name": "flower-shop-distillation",
+  "version": "1.0.0",
+  "description": "Дистилляция учитель→ученик: детерминированный движок размечает данные, маленькая softmax-модель (с нуля, без зависимостей) учится его повторять для дешёвого офлайн-инференса",
+  "private": true,
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.mjs"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "@anthropic-ai/sdk": "^0.65.0"
+  }
+}

@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Магазин цветов — дистилляция</title>
+<style>
+  :root{
+    --bg:#f4f6f9; --surface:#fff; --border:#e2e7ee; --ink:#1a2230; --soft:#556; --faint:#8791a4;
+    --accent:#4457c4; --accent-soft:#e2e6fb; --ok:#1f7a4d; --bad:#b32424; --teacher:#8a5a1e; --teacher-soft:#f3e6d2;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; --mono:ui-monospace,monospace;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --bg:#101320; --surface:#181c2b; --border:#282f45; --ink:#e6eaf5; --soft:#a6afc6; --faint:#767f98;
+    --accent:#8a9cf0; --accent-soft:#1b2238; --ok:#5cc98c; --bad:#e57373; --teacher:#e0af5a; --teacher-soft:#2a2312;
+  }}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);min-height:100vh}
+  header{padding:16px 22px;border-bottom:1px solid var(--border);background:var(--surface);display:flex;align-items:center;gap:10px}
+  header h1{font-size:18px;margin:0}
+  header .badge{font-size:11px;color:var(--faint);margin-left:auto;font-family:var(--mono)}
+  main{max-width:760px;margin:0 auto;padding:20px;display:grid;gap:16px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px}
+  .card h2{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--soft)}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+  .kpi{background:var(--accent-soft);border-radius:10px;padding:12px}
+  .kpi .v{font-size:22px;font-weight:700;font-family:var(--mono)}
+  .kpi .l{font-size:12px;color:var(--soft);margin-top:2px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  input,button{padding:9px 12px;border-radius:9px;border:1px solid var(--border);font-size:14px}
+  input{background:var(--bg);color:var(--ink)}
+  button{border:none;background:var(--accent);color:#fff;font-weight:600;cursor:pointer}
+  .verdict{display:flex;gap:12px;margin-top:12px;flex-wrap:wrap}
+  .box{flex:1;min-width:180px;border-radius:12px;padding:12px;border:1px solid var(--border)}
+  .box.st{border-left:5px solid var(--accent)} .box.te{border-left:5px solid var(--teacher)}
+  .lbl{font-size:22px;font-weight:700;font-family:var(--mono)}
+  .bars{margin-top:8px}
+  .bar{display:flex;align-items:center;gap:8px;font-size:12px;margin:3px 0}
+  .bar .t{width:64px;color:var(--soft)} .bar .track{flex:1;height:6px;border-radius:4px;background:var(--accent-soft);overflow:hidden}
+  .bar .track>i{display:block;height:100%;background:var(--accent)}
+  .agree{font-weight:700} .agree.y{color:var(--ok)} .agree.n{color:var(--bad)}
+  .muted{color:var(--faint);font-size:13px}
+  .chip{font-size:12px;padding:6px 10px;border-radius:18px;background:var(--accent-soft);color:var(--accent);border:none;cursor:pointer}
+</style>
+</head>
+<body>
+  <header>
+    <span style="font-size:22px">🎓</span>
+    <h1>Дистилляция · учитель → ученик</h1>
+    <span class="badge" id="engine"></span>
+  </header>
+  <main>
+    <div class="card">
+      <h2>Модель ученика</h2>
+      <div class="kpis" id="kpis"><span class="muted">загрузка…</span></div>
+      <div class="row" style="margin-top:12px">
+        <button onclick="train()">Переобучить</button>
+        <a class="chip" href="/api/model" target="_blank">Экспорт весов (JSON)</a>
+        <span class="muted" id="tmeta"></span>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Проверить фразу: ученик vs учитель</h2>
+      <div class="row">
+        <input id="q" placeholder="например: оформить заказ" style="flex:1" value="хочу купить букет роз">
+        <button onclick="classify()">Классифицировать</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="chip" onclick="q('покажи каталог')">каталог</button>
+        <button class="chip" onclick="q('добавьте 2 розы')">добавить</button>
+        <button class="chip" onclick="q('оформить заказ')">оформить</button>
+        <button class="chip" onclick="q('что-нибудь недорогое')">фильтр</button>
+        <button class="chip" onclick="q('что в корзине')">корзина</button>
+      </div>
+      <div class="verdict" id="verdict"></div>
+    </div>
+  </main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+function q(t){ $('q').value=t; classify(); }
+
+async function loadMetrics(){
+  const m = await (await fetch('/api/metrics')).json();
+  $('kpis').innerHTML = [
+    ['Согласие с учителем', Math.round((m.agreement||0)*100)+'%'],
+    ['Loss', m.loss],
+    ['Датасет', m.dataset],
+    ['Train / Test', (m.train||0)+' / '+(m.test||0)],
+  ].map(([l,v])=>`<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
+}
+async function train(){
+  $('tmeta').textContent='обучаю…';
+  const m = await (await fetch('/api/train',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({n:1200,epochs:600,lr:0.8})})).json();
+  $('tmeta').textContent = 'готово: согласие '+Math.round(m.agreement*100)+'%'; loadMetrics();
+}
+async function classify(){
+  const d = await (await fetch('/api/classify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:$('q').value})})).json();
+  const probs = Object.entries(d.probs).sort((a,b)=>b[1]-a[1]);
+  $('verdict').innerHTML = `
+    <div class="box st"><div class="muted">УЧЕНИК (локальная модель)</div><div class="lbl">${d.label}</div>
+      <div class="bars">${probs.map(([l,p])=>`<div class="bar"><span class="t">${l}</span><span class="track"><i style="width:${Math.round(p*100)}%"></i></span><span>${Math.round(p*100)}%</span></div>`).join('')}</div></div>
+    <div class="box te"><div class="muted">УЧИТЕЛЬ (правила)</div><div class="lbl">${d.teacher}</div>
+      <div style="margin-top:10px" class="agree ${d.agree?'y':'n'}">${d.agree?'✓ совпадает':'✗ расхождение'}</div></div>`;
+}
+fetch('/api/health').then(r=>r.json()).then(d=>{ $('engine').textContent='учитель: '+(d.engine==='llm-teacher'?'Claude':'правила'); });
+loadMetrics(); classify();
+</script>
+</body>
+</html>
