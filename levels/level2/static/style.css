@@ -1,0 +1,29 @@
+body { font-family: Arial, sans-serif; margin: 0; background: #fafafa; }
+.wrap { max-width: 980px; margin: 24px auto; padding: 0 16px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.card { background: white; border: 1px solid #e5e5e5; border-radius: 12px; padding: 12px; }
+.card img { width: 100%; height: 180px; object-fit: cover; border-radius: 10px; }
+.price { font-weight: bold; margin: 8px 0; }
+input, button { width: 100%; padding: 10px; margin-top: 8px; border-radius: 10px; border: 1px solid #ddd; }
+button { cursor: pointer; }
+.muted { color: #777; }
+
+/* Уровень 2: навигация, поиск, категории, корзина */
+.topbar { display: flex; gap: 16px; margin: 12px 0; }
+.topbar a, .cat, .btn { color: #b3123c; text-decoration: none; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.row input { flex: 1 1 200px; }
+.row button { width: auto; }
+.cats { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+.cat { background: white; border: 1px solid #e5e5e5; border-radius: 999px; padding: 6px 12px; }
+.cat.active { background: #b3123c; color: white; border-color: #b3123c; }
+.btn { display: inline-block; background: white; border: 1px solid #e5e5e5;
+       border-radius: 10px; padding: 10px 14px; margin-top: 8px; }
+.table { width: 100%; background: white; border: 1px solid #e5e5e5;
+         border-radius: 12px; border-collapse: collapse; margin: 12px 0; }
+.table th, .table td { padding: 10px; border-bottom: 1px solid #f0f0f0; text-align: left; }
+.flash { padding: 10px 12px; border-radius: 10px; margin: 8px 0; background: #eee; }
+.flash.success { background: #e6f6e6; }
+.flash.error { background: #fde8e8; }
+.flash.info { background: #e8f0fd; }
+.card h3 a { color: inherit; text-decoration: none; }

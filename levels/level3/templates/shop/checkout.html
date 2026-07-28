@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+
+{% block title %}Оформление заказа — Магазин цветов{% endblock %}
+
+{% block content %}
+  <h2>Оформление заказа</h2>
+
+  <table class="table">
+    <tr><th>Товар</th><th>Кол-во</th><th>Сумма</th></tr>
+    {% for item in cart_items %}
+      <tr>
+        <td>{{ item.product.name }}</td>
+        <td>{{ item.quantity }}</td>
+        <td>{{ item.subtotal }} €</td>
+      </tr>
+    {% endfor %}
+  </table>
+  <p class="price">Итого: {{ total }} €</p>
+
+  <div class="card">
+    <form method="POST" action="{% url 'shop:checkout' %}">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <button type="submit">Подтвердить заказ</button>
+    </form>
+  </div>
+
+  <p><a href="{% url 'shop:cart' %}">← Вернуться в корзину</a></p>
+{% endblock %}

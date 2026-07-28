@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"/>
+  <title><%= product.name %></title>
+  <link rel="stylesheet" href="/public/style.css"/>
+</head>
+<body>
+<div class="wrap">
+  <a href="/">← Назад</a>
+  <h1><%= product.name %></h1>
+  <p><%= product.description %></p>
+  <div class="price"><%= Number(product.price).toFixed(2) %> €</div>
+
+  <form method="POST" action="/order">
+    <input type="hidden" name="product_id" value="<%= product.id %>"/>
+    <input name="name" placeholder="Ваше имя" required/>
+    <input name="phone" placeholder="Телефон (необязательно)"/>
+    <button type="submit">Заказать</button>
+  </form>
+</div>
+</body>
+</html>

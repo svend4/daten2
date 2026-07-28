@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Страница не найдена — Магазин цветов</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="wrap">
+    <h1>🌹 Магазин цветов</h1>
+    <p class="muted">Уровень 2: Flask + SQLite + шаблоны.</p>
+
+    <h2>404 — страница не найдена</h2>
+    <p class="muted">Такой страницы нет. Возможно, ссылка устарела.</p>
+    <a class="btn" href="{{ url_for('index') }}">Вернуться в каталог</a>
+  </div>
+</body>
+</html>

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Оформление заказа — Магазин цветов</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="wrap">
+    <h1>🌹 Магазин цветов</h1>
+    <p class="muted">Уровень 2: Flask + SQLite + шаблоны.</p>
+
+    <div class="topbar">
+      <a href="{{ url_for('index') }}">← Каталог</a>
+      <a href="{{ url_for('cart') }}">🛒 Корзина</a>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <div class="flash {{ category }}">{{ message }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    <h2>Оформление заказа</h2>
+
+    <div class="card">
+      <h3>Ваш заказ</h3>
+      <table class="table">
+        {% for item in cart_items %}
+          <tr>
+            <td>{{ item['name'] }} × {{ item['quantity'] }}</td>
+            <td>{{ "%.2f"|format(item['subtotal']) }} €</td>
+          </tr>
+        {% endfor %}
+      </table>
+      <div class="price">Итого: {{ "%.2f"|format(total) }} €</div>
+    </div>
+
+    <div class="card">
+      <h3>Данные покупателя</h3>
+      <form method="POST" action="{{ url_for('checkout') }}">
+        <input name="name" placeholder="Ваше имя *" required>
+        <input name="phone" placeholder="Телефон *" required>
+        <input name="email" placeholder="Email (необязательно)">
+        <input name="address" placeholder="Адрес доставки *" required>
+        <button type="submit">Подтвердить заказ</button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

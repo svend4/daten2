@@ -1,0 +1,31 @@
+{% load static %}<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>{% block title %}Магазин цветов{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'style.css' %}"/>
+</head>
+<body>
+<div class="wrap">
+  <h1>🌹 Магазин цветов</h1>
+  <p class="muted">Уровень 3: Django + админка.</p>
+
+  <nav class="nav">
+    <a href="{% url 'shop:index' %}">Каталог</a>
+    <a href="{% url 'shop:cart' %}">Корзина</a>
+    <a href="/admin/">Админка</a>
+  </nav>
+
+  {% if messages %}
+    <ul class="messages">
+      {% for message in messages %}
+        <li class="msg {{ message.tags }}">{{ message }}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+
+  {% block content %}{% endblock %}
+</div>
+</body>
+</html>

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Магазин цветов</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="wrap">
+    <h1>🌹 Магазин цветов</h1>
+    <p class="muted">Уровень 2: Flask + SQLite + шаблоны.</p>
+
+    <div class="topbar">
+      <a href="{{ url_for('index') }}">Каталог</a>
+      <a href="{{ url_for('cart') }}">🛒 Корзина</a>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <div class="flash {{ category }}">{{ message }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    <form class="row" method="GET" action="{{ url_for('index') }}">
+      <input name="search" placeholder="Поиск цветов..." value="{{ search_query }}">
+      <button type="submit">Найти</button>
+    </form>
+
+    <div class="cats">
+      <a href="{{ url_for('index') }}" class="cat {% if not current_category %}active{% endif %}">Все</a>
+      {% for c in categories %}
+        <a href="{{ url_for('index', category=c['id']) }}"
+           class="cat {% if current_category == c['id'] %}active{% endif %}">{{ c['name'] }}</a>
+      {% endfor %}
+    </div>
+
+    <h2>{{ page_title }}</h2>
+
+    <div class="grid">
+      {% for p in products %}
+        <div class="card">
+          <a href="{{ url_for('product_detail', product_id=p['id']) }}">
+            <img src="{{ url_for('static', filename=(p['image'] or 'images/rose.jpg')) }}" alt="flower">
+          </a>
+          <h3><a href="{{ url_for('product_detail', product_id=p['id']) }}">{{ p['name'] }}</a></h3>
+          <p>{{ p['description'] }}</p>
+          <div class="price">{{ "%.2f"|format(p['price']) }} €</div>
+          <p class="muted">В наличии: {{ p['stock'] }} шт.</p>
+
+          <form method="POST" action="{{ url_for('add_to_cart', product_id=p['id']) }}">
+            <input type="number" name="quantity" value="1" min="1" max="{{ p['stock'] }}">
+            <button type="submit">В корзину</button>
+          </form>
+        </div>
+      {% else %}
+        <p class="muted">Товары не найдены.</p>
+      {% endfor %}
+    </div>
+  </div>
+</body>
+</html>

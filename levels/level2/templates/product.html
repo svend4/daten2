@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>{{ product['name'] }} — Магазин цветов</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="wrap">
+    <h1>🌹 Магазин цветов</h1>
+    <p class="muted">Уровень 2: Flask + SQLite + шаблоны.</p>
+
+    <div class="topbar">
+      <a href="{{ url_for('index') }}">← Каталог</a>
+      <a href="{{ url_for('cart') }}">🛒 Корзина</a>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <div class="flash {{ category }}">{{ message }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    <div class="card">
+      <img src="{{ url_for('static', filename=(product['image'] or 'images/rose.jpg')) }}" alt="flower">
+      <h2>{{ product['name'] }}</h2>
+      <p>{{ product['description'] }}</p>
+      <div class="price">{{ "%.2f"|format(product['price']) }} €</div>
+      <p class="muted">В наличии: {{ product['stock'] }} шт.</p>
+
+      {% if product['stock'] > 0 %}
+        <form method="POST" action="{{ url_for('add_to_cart', product_id=product['id']) }}">
+          <input type="number" name="quantity" value="1" min="1" max="{{ product['stock'] }}">
+          <button type="submit">В корзину</button>
+        </form>
+      {% else %}
+        <p class="muted">Нет в наличии</p>
+      {% endif %}
+    </div>
+  </div>
+</body>
+</html>

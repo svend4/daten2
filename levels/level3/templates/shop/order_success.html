@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+
+{% block title %}Заказ #{{ order.id }} — Магазин цветов{% endblock %}
+
+{% block content %}
+  <h2>Спасибо! Заказ #{{ order.id }} принят</h2>
+
+  <div class="card">
+    <div class="muted">Статус: {{ order.get_status_display }}</div>
+    <p>Клиент: {{ order.customer.name }}, тел. {{ order.customer.phone }}</p>
+    <p>Адрес доставки: {{ order.delivery_address }}</p>
+    {% if order.notes %}<p>Примечания: {{ order.notes }}</p>{% endif %}
+
+    <table class="table">
+      <tr><th>Товар</th><th>Цена</th><th>Кол-во</th><th>Сумма</th></tr>
+      {% for item in order.items.all %}
+        <tr>
+          <td>{{ item.product.name }}</td>
+          <td>{{ item.price }} €</td>
+          <td>{{ item.quantity }}</td>
+          <td>{{ item.subtotal }} €</td>
+        </tr>
+      {% endfor %}
+    </table>
+
+    <div class="price">Итого: {{ order.total_amount }} €</div>
+  </div>
+
+  <a class="btn" href="{% url 'shop:index' %}">Вернуться в каталог</a>
+{% endblock %}

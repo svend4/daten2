@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+
+{% block title %}Корзина — Магазин цветов{% endblock %}
+
+{% block content %}
+  <h2>Корзина</h2>
+
+  {% if cart_items %}
+    <table class="table">
+      <tr>
+        <th>Товар</th>
+        <th>Цена</th>
+        <th>Количество</th>
+        <th>Сумма</th>
+        <th></th>
+      </tr>
+      {% for item in cart_items %}
+        <tr>
+          <td><a href="{{ item.product.get_absolute_url }}">{{ item.product.name }}</a></td>
+          <td>{{ item.price }} €</td>
+          <td>
+            <form method="POST" action="{% url 'shop:update_cart' item.product.slug %}" class="inline">
+              {% csrf_token %}
+              <input type="number" name="quantity" value="{{ item.quantity }}" min="1" max="{{ item.product.stock }}">
+              <button type="submit">Обновить</button>
+            </form>
+          </td>
+          <td>{{ item.subtotal }} €</td>
+          <td>
+            <form method="POST" action="{% url 'shop:remove_from_cart' item.product.slug %}" class="inline">
+              {% csrf_token %}
+              <button type="submit">Удалить</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+    </table>
+
+    <p class="price">Итого: {{ total }} €</p>
+
+    <div class="grid">
+      <form method="POST" action="{% url 'shop:clear_cart' %}">
+        {% csrf_token %}
+        <button type="submit">Очистить корзину</button>
+      </form>
+      <a class="btn" href="{% url 'shop:checkout' %}">Оформить заказ</a>
+    </div>
+  {% else %}
+    <p class="muted">Корзина пуста.</p>
+    <a class="btn" href="{% url 'shop:index' %}">Перейти в каталог</a>
+  {% endif %}
+{% endblock %}

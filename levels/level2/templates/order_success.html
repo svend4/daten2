@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Заказ оформлен — Магазин цветов</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="wrap">
+    <h1>🌹 Магазин цветов</h1>
+    <p class="muted">Уровень 2: Flask + SQLite + шаблоны.</p>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <div class="flash {{ category }}">{{ message }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    {% set order = order_data['order'] %}
+
+    <h2>✅ Спасибо за заказ!</h2>
+
+    <div class="card">
+      <p>Номер заказа: <strong>#{{ order['id'] }}</strong></p>
+      <p>Покупатель: {{ order['customer_name'] }}</p>
+      <p>Телефон: {{ order['phone'] }}</p>
+      {% if order['address'] %}<p>Адрес доставки: {{ order['address'] }}</p>{% endif %}
+      <p class="muted">Дата: {{ order['created_at'] }} · статус: {{ order['status'] }}</p>
+
+      <table class="table">
+        {% for item in order_data['items'] %}
+          <tr>
+            <td>{{ item['name'] }} × {{ item['qty'] }}</td>
+            <td>{{ "%.2f"|format(item['price'] * item['qty']) }} €</td>
+          </tr>
+        {% endfor %}
+      </table>
+
+      <div class="price">Итого: {{ "%.2f"|format(order['total_amount']) }} €</div>
+    </div>
+
+    <a class="btn" href="{{ url_for('index') }}">Вернуться в каталог</a>
+  </div>
+</body>
+</html>

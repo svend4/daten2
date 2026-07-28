@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Корзина — Магазин цветов</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="wrap">
+    <h1>🌹 Магазин цветов</h1>
+    <p class="muted">Уровень 2: Flask + SQLite + шаблоны.</p>
+
+    <div class="topbar">
+      <a href="{{ url_for('index') }}">← Каталог</a>
+      <a href="{{ url_for('cart') }}">🛒 Корзина</a>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <div class="flash {{ category }}">{{ message }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    <h2>Корзина</h2>
+
+    {% if cart_items %}
+      <table class="table">
+        <tr>
+          <th>Товар</th><th>Цена</th><th>Кол-во</th><th>Сумма</th><th></th>
+        </tr>
+        {% for item in cart_items %}
+          <tr>
+            <td><a href="{{ url_for('product_detail', product_id=item['id']) }}">{{ item['name'] }}</a></td>
+            <td>{{ "%.2f"|format(item['price']) }} €</td>
+            <td>{{ item['quantity'] }}</td>
+            <td>{{ "%.2f"|format(item['subtotal']) }} €</td>
+            <td><a href="{{ url_for('remove_from_cart', product_id=item['id']) }}">Удалить</a></td>
+          </tr>
+        {% endfor %}
+      </table>
+
+      <div class="price">Итого: {{ "%.2f"|format(total) }} €</div>
+
+      <div class="row">
+        <a class="btn" href="{{ url_for('checkout') }}">Оформить заказ</a>
+        <a class="btn" href="{{ url_for('clear_cart') }}">Очистить корзину</a>
+      </div>
+    {% else %}
+      <p class="muted">Ваша корзина пуста.</p>
+      <a class="btn" href="{{ url_for('index') }}">Перейти в каталог</a>
+    {% endif %}
+  </div>
+</body>
+</html>

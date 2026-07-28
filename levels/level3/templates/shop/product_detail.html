@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ product.name }} — Магазин цветов{% endblock %}
+
+{% block content %}
+  <p><a href="{% url 'shop:index' %}">← Назад в каталог</a></p>
+
+  <div class="card">
+    {% if product.image %}
+      <img src="{{ product.image.url }}" alt="{{ product.name }}">
+    {% endif %}
+    <div class="title">{{ product.name }}</div>
+    <div class="muted">
+      Категория: <a href="{{ product.category.get_absolute_url }}">{{ product.category.name }}</a>
+    </div>
+    <div class="desc">{{ product.description }}</div>
+    <div class="price">{{ product.price }} €</div>
+    <div class="muted">{{ product.stock_status }}</div>
+
+    {% if product.is_in_stock %}
+      <form method="POST" action="{% url 'shop:add_to_cart' product.slug %}">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">В корзину</button>
+      </form>
+    {% else %}
+      <button type="button" disabled>Нет в наличии</button>
+    {% endif %}
+  </div>
+{% endblock %}

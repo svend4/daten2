@@ -1,0 +1,25 @@
+# --- Node ---
+node_modules/
+.next/
+dist/
+build/
+*.log
+npm-debug.log*
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+flask_session/
+
+# --- Локальные секреты и окружение ---
+.env
+.env.local
+.env.*.local
+
+# --- Служебное ---
+.DS_Store
+*.sqlite3-journal
