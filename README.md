@@ -9,15 +9,40 @@
 ```
 .
 ├── backend/ + frontend/ + Dockerfile   # Уровень 5 в корне — то, что деплоится (Render)
-└── levels/
-    ├── level1/   PHP + SQLite
-    ├── level2/   Flask + SQLite + Jinja2
-    ├── level3/   Django (ORM, админка)
-    ├── level4/   Node.js + Express + EJS
-    ├── level5/   React (Vite) + Flask API
-    ├── level6/   Next.js + TypeScript + Prisma + PostgreSQL + Tailwind
-    └── level7/   Микросервисы: nginx + Node + Flask + PostgreSQL + RabbitMQ
+├── levels/
+│   ├── level1/   PHP + SQLite
+│   ├── level2/   Flask + SQLite + Jinja2
+│   ├── level3/   Django (ORM, админка)
+│   ├── level4/   Node.js + Express + EJS
+│   ├── level5/   React (Vite) + Flask API
+│   ├── level6/   Next.js + TypeScript + Prisma + PostgreSQL + Tailwind
+│   └── level7/   Микросервисы: nginx + Node + Flask + PostgreSQL + RabbitMQ
+└── act/          NPP-Act — слой действия над контрактом (см. ниже)
 ```
+
+## `act/` — слой действия
+
+Магазин отвечает на вопрос «как это сделать». `act/` отвечает на другой:
+**вправе ли агент это сделать и что будет, если он это сделает.**
+
+Это эталонная реализация **NPP-Act 1.0** — расширения протокола
+[Nautilus](https://github.com/svend4/nautilus) до уровня совместимости 4
+(Actionable). Протокол Наутилуса федерирует знание; NPP-Act добавляет действие.
+
+Каждый глагол объявляет не форму вызова, а **последствие**: что изменится в мире
+(`effect`), можно ли отменить (`reversible`), сколько стоит (`cost`), нужен ли
+человек (`consent`). Губернатор решает допуск **до** исполнения, журнал —
+персистентная хэш-цепь решений.
+
+```bash
+python3 -m act.demo.scenario        # сквозной сценарий: время + товар
+python3 -m act.npp_act.profile      # сравнение семи уровней по возможностям
+python3 -m act.tests.test_act       # 41 проверка ядра
+```
+
+Подробности — в [`act/README.md`](act/README.md) и
+[`act/SPEC-NPP-ACT.md`](act/SPEC-NPP-ACT.md). Всего **556 проверок**,
+зависимостей нет, API-ключи не нужны.
 
 > Уровень 5 лежит и в корне (как цель деплоя), и в `levels/level5/` — чтобы все семь
 > уровней можно было изучать и запускать единообразно.
