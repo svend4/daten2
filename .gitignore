@@ -27,3 +27,4 @@ flask_session/
 # --- NPP-Act ---
 *.jsonl
 npp_venue.db
+act/viz/map.html

@@ -1,0 +1,153 @@
+{
+  "npp_act": "1.0",
+  "service": "level6-nextjs",
+  "title": "Уровень 6 — Next.js + Prisma + PostgreSQL",
+  "base_url": "http://127.0.0.1:8086",
+  "profile": "vendor",
+  "q6": "100101",
+  "level_profile": {
+    "level": 6,
+    "stack": "Next.js (App Router) + Prisma + PostgreSQL",
+    "language": "typescript",
+    "storage": "postgres",
+    "weight": "heavy",
+    "runtime_units": 2,
+    "transactional": true,
+    "stock_checked": true,
+    "concurrency_safe": true,
+    "concurrency_evidence": "by_design",
+    "contract_conformance": {
+      "passed": 7,
+      "total": 22
+    },
+    "missing_verbs": [],
+    "features": {
+      "has_admin": false,
+      "decimal_money": true,
+      "event_bus": false,
+      "offline_capable": false,
+      "status_machine": false,
+      "spa_frontend": true
+    },
+    "defects": [
+      {
+        "code": "contract-envelope",
+        "severity": "critical",
+        "detail": "7/22: вместо массива отдаётся конверт {success, data}",
+        "evidence": "route.ts отвечает NextResponse.json({ success: false, errors: [...] }) — контракт ждёт массив и поле error"
+      },
+      {
+        "code": "camel-case-fields",
+        "severity": "high",
+        "detail": "productId вместо product_id, price строкой, UUID с дефисами вместо 32 hex",
+        "evidence": "createOrderSchema принимает items[].productId; Decimal сериализуется строкой"
+      }
+    ],
+    "audit": {
+      "source": "аудит семи уровней daten2",
+      "verified_against": "origin/claude/level6-nextjs-GBpVR:src/app/api/orders/route.ts"
+    },
+    "disclaimer": "Профиль — ЗАЯВЛЕНИЕ уровня о себе, а не доказательство (SPEC-NPP-ACT.md §10.1). Потребитель обязан проверять поведение, а не верить полю: act/tests/test_profile.py сверяет каждое утверждение этого блока с настоящими исходниками уровня."
+  },
+  "capabilities": [
+    {
+      "id": "health.check",
+      "title": "Живость и номер уровня",
+      "description": "GET /api/health. Отвечает, какой из семи уровней сейчас за контрактом.",
+      "effect": "read",
+      "reversible": false,
+      "cost": {
+        "money": 0,
+        "time_s": 0.05
+      },
+      "consent": "none",
+      "binding": {
+        "protocol": "http",
+        "method": "GET",
+        "path": "/api/health"
+      },
+      "input": {},
+      "output": {
+        "ok": "boolean",
+        "level": "integer",
+        "stack": "string"
+      }
+    },
+    {
+      "id": "catalog.list",
+      "title": "Каталог активных товаров",
+      "description": "GET /api/products единого контракта daten2. Массив, не конверт.",
+      "effect": "read",
+      "reversible": false,
+      "cost": {
+        "money": 0,
+        "time_s": 0.1
+      },
+      "consent": "none",
+      "binding": {
+        "protocol": "http",
+        "method": "GET",
+        "path": "/api/products"
+      },
+      "input": {},
+      "output": {
+        "": "array of product"
+      }
+    },
+    {
+      "id": "order.create",
+      "title": "Оформить заказ",
+      "description": "POST /api/orders. Необратим: отмены в контракте v1 нет, поэтому требуется подтверждение владельца профиля.",
+      "effect": "commit",
+      "reversible": false,
+      "cost": {
+        "money": "variable",
+        "currency": "EUR",
+        "time_s": 0.3
+      },
+      "consent": "confirm",
+      "idempotency": "field:client_token",
+      "binding": {
+        "protocol": "http",
+        "method": "POST",
+        "path": "/api/orders"
+      },
+      "input": {
+        "name": "string",
+        "phone": "string?",
+        "email": "string?",
+        "address": "string?",
+        "items": "array of {product_id, quantity}",
+        "max_money": "number?"
+      },
+      "output": {
+        "order_number": "string",
+        "total": "number"
+      }
+    },
+    {
+      "id": "order.get",
+      "title": "Посмотреть заказ",
+      "description": "GET /api/orders/{order_number} по непубличному токену (32 hex, не инкремент).",
+      "effect": "read",
+      "reversible": false,
+      "cost": {
+        "money": 0,
+        "time_s": 0.1
+      },
+      "consent": "none",
+      "binding": {
+        "protocol": "http",
+        "method": "GET",
+        "path": "/api/orders/{order_number}"
+      },
+      "input": {
+        "order_number": "string"
+      },
+      "output": {
+        "order": "object",
+        "items": "array"
+      }
+    }
+  ]
+}

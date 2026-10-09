@@ -1,0 +1,153 @@
+{
+  "npp_act": "1.0",
+  "service": "level3-django",
+  "title": "Уровень 3 — Django + ORM + админка",
+  "base_url": "http://127.0.0.1:8083",
+  "profile": "vendor",
+  "q6": "100101",
+  "level_profile": {
+    "level": 3,
+    "stack": "Django + ORM + штатная админка, SQLite",
+    "language": "python",
+    "storage": "sqlite",
+    "weight": "medium",
+    "runtime_units": 1,
+    "transactional": false,
+    "stock_checked": false,
+    "concurrency_safe": true,
+    "concurrency_evidence": "not_measured",
+    "contract_conformance": {
+      "passed": 22,
+      "total": 22
+    },
+    "missing_verbs": [],
+    "features": {
+      "has_admin": true,
+      "decimal_money": true,
+      "event_bus": false,
+      "offline_capable": true,
+      "status_machine": true,
+      "spa_frontend": false
+    },
+    "defects": [
+      {
+        "code": "no-atomic-on-api-path",
+        "severity": "high",
+        "detail": "создание заказа на API-пути идёт без transaction.atomic",
+        "evidence": "api_create_order() вызывает Order.objects.create и prod.save() вне атомарного блока — сбой на середине оставляет половину заказа"
+      },
+      {
+        "code": "stock-not-checked",
+        "severity": "high",
+        "detail": "остаток не сверяется, prod.stock просто уменьшается",
+        "evidence": "в api_create_order() есть 'prod.stock -= qty' и нет ни одного сравнения stock с qty"
+      }
+    ],
+    "audit": {
+      "source": "аудит семи уровней daten2",
+      "verified_against": "origin/claude/level3-django-GBpVR:shop/views.py"
+    },
+    "disclaimer": "Профиль — ЗАЯВЛЕНИЕ уровня о себе, а не доказательство (SPEC-NPP-ACT.md §10.1). Потребитель обязан проверять поведение, а не верить полю: act/tests/test_profile.py сверяет каждое утверждение этого блока с настоящими исходниками уровня."
+  },
+  "capabilities": [
+    {
+      "id": "health.check",
+      "title": "Живость и номер уровня",
+      "description": "GET /api/health. Отвечает, какой из семи уровней сейчас за контрактом.",
+      "effect": "read",
+      "reversible": false,
+      "cost": {
+        "money": 0,
+        "time_s": 0.05
+      },
+      "consent": "none",
+      "binding": {
+        "protocol": "http",
+        "method": "GET",
+        "path": "/api/health"
+      },
+      "input": {},
+      "output": {
+        "ok": "boolean",
+        "level": "integer",
+        "stack": "string"
+      }
+    },
+    {
+      "id": "catalog.list",
+      "title": "Каталог активных товаров",
+      "description": "GET /api/products единого контракта daten2. Массив, не конверт.",
+      "effect": "read",
+      "reversible": false,
+      "cost": {
+        "money": 0,
+        "time_s": 0.1
+      },
+      "consent": "none",
+      "binding": {
+        "protocol": "http",
+        "method": "GET",
+        "path": "/api/products"
+      },
+      "input": {},
+      "output": {
+        "": "array of product"
+      }
+    },
+    {
+      "id": "order.create",
+      "title": "Оформить заказ",
+      "description": "POST /api/orders. Необратим: отмены в контракте v1 нет, поэтому требуется подтверждение владельца профиля.",
+      "effect": "commit",
+      "reversible": false,
+      "cost": {
+        "money": "variable",
+        "currency": "EUR",
+        "time_s": 0.3
+      },
+      "consent": "confirm",
+      "idempotency": "field:client_token",
+      "binding": {
+        "protocol": "http",
+        "method": "POST",
+        "path": "/api/orders"
+      },
+      "input": {
+        "name": "string",
+        "phone": "string?",
+        "email": "string?",
+        "address": "string?",
+        "items": "array of {product_id, quantity}",
+        "max_money": "number?"
+      },
+      "output": {
+        "order_number": "string",
+        "total": "number"
+      }
+    },
+    {
+      "id": "order.get",
+      "title": "Посмотреть заказ",
+      "description": "GET /api/orders/{order_number} по непубличному токену (32 hex, не инкремент).",
+      "effect": "read",
+      "reversible": false,
+      "cost": {
+        "money": 0,
+        "time_s": 0.1
+      },
+      "consent": "none",
+      "binding": {
+        "protocol": "http",
+        "method": "GET",
+        "path": "/api/orders/{order_number}"
+      },
+      "input": {
+        "order_number": "string"
+      },
+      "output": {
+        "order": "object",
+        "items": "array"
+      }
+    }
+  ]
+}

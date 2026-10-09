@@ -1,0 +1,161 @@
+{
+  "npp_act": "1.0",
+  "service": "level7-enterprise",
+  "title": "Уровень 7 — микросервисы, PostgreSQL, RabbitMQ",
+  "base_url": "http://127.0.0.1:8087",
+  "profile": "vendor",
+  "q6": "100101",
+  "level_profile": {
+    "level": 7,
+    "stack": "nginx-шлюз + order-service (Flask) + product-service (Node) + notification-service + PostgreSQL + RabbitMQ — шесть контейнеров",
+    "language": "python+javascript",
+    "storage": "postgres",
+    "weight": "heavy",
+    "runtime_units": 6,
+    "transactional": true,
+    "stock_checked": false,
+    "concurrency_safe": true,
+    "concurrency_evidence": "by_design",
+    "contract_conformance": {
+      "passed": 15,
+      "total": 22
+    },
+    "missing_verbs": [
+      "order.get"
+    ],
+    "features": {
+      "has_admin": false,
+      "decimal_money": false,
+      "event_bus": true,
+      "offline_capable": false,
+      "status_machine": false,
+      "spa_frontend": true
+    },
+    "defects": [
+      {
+        "code": "missing-order-get",
+        "severity": "critical",
+        "detail": "15/22: GET /api/orders/{token} не реализован вовсе",
+        "evidence": "в order-service объявлены только @app.get('/health') и @app.post('/api/orders')"
+      },
+      {
+        "code": "blocking-broker-publish",
+        "severity": "critical",
+        "detail": "при недоступном брокере запрос блокируется на 20 секунд и событие теряется",
+        "evidence": "publish() делает 20 попыток с time.sleep(1) и молча выходит — исключение подавлено, события нет"
+      },
+      {
+        "code": "stock-not-checked",
+        "severity": "high",
+        "detail": "остаток не сверяется",
+        "evidence": "в create_order() 'SELECT name, price FROM products WHERE id=%s' без stock"
+      }
+    ],
+    "audit": {
+      "source": "аудит семи уровней daten2",
+      "verified_against": "origin/claude/level7-enterprise-GBpVR:services/order-service/app.py"
+    },
+    "disclaimer": "Профиль — ЗАЯВЛЕНИЕ уровня о себе, а не доказательство (SPEC-NPP-ACT.md §10.1). Потребитель обязан проверять поведение, а не верить полю: act/tests/test_profile.py сверяет каждое утверждение этого блока с настоящими исходниками уровня."
+  },
+  "capabilities": [
+    {
+      "id": "health.check",
+      "title": "Живость и номер уровня",
+      "description": "GET /api/health. Отвечает, какой из семи уровней сейчас за контрактом.",
+      "effect": "read",
+      "reversible": false,
+      "cost": {
+        "money": 0,
+        "time_s": 0.05
+      },
+      "consent": "none",
+      "binding": {
+        "protocol": "http",
+        "method": "GET",
+        "path": "/api/health"
+      },
+      "input": {},
+      "output": {
+        "ok": "boolean",
+        "level": "integer",
+        "stack": "string"
+      }
+    },
+    {
+      "id": "catalog.list",
+      "title": "Каталог активных товаров",
+      "description": "GET /api/products единого контракта daten2. Массив, не конверт.",
+      "effect": "read",
+      "reversible": false,
+      "cost": {
+        "money": 0,
+        "time_s": 0.1
+      },
+      "consent": "none",
+      "binding": {
+        "protocol": "http",
+        "method": "GET",
+        "path": "/api/products"
+      },
+      "input": {},
+      "output": {
+        "": "array of product"
+      }
+    },
+    {
+      "id": "order.create",
+      "title": "Оформить заказ",
+      "description": "POST /api/orders. Необратим: отмены в контракте v1 нет, поэтому требуется подтверждение владельца профиля.",
+      "effect": "commit",
+      "reversible": false,
+      "cost": {
+        "money": "variable",
+        "currency": "EUR",
+        "time_s": 0.3
+      },
+      "consent": "confirm",
+      "idempotency": "field:client_token",
+      "binding": {
+        "protocol": "http",
+        "method": "POST",
+        "path": "/api/orders"
+      },
+      "input": {
+        "name": "string",
+        "phone": "string?",
+        "email": "string?",
+        "address": "string?",
+        "items": "array of {product_id, quantity}",
+        "max_money": "number?"
+      },
+      "output": {
+        "order_number": "string",
+        "total": "number"
+      }
+    },
+    {
+      "id": "order.get",
+      "title": "Посмотреть заказ",
+      "description": "GET /api/orders/{order_number} по непубличному токену (32 hex, не инкремент).",
+      "effect": "read",
+      "reversible": false,
+      "cost": {
+        "money": 0,
+        "time_s": 0.1
+      },
+      "consent": "none",
+      "binding": {
+        "protocol": "http",
+        "method": "GET",
+        "path": "/api/orders/{order_number}"
+      },
+      "input": {
+        "order_number": "string"
+      },
+      "output": {
+        "order": "object",
+        "items": "array"
+      }
+    }
+  ]
+}

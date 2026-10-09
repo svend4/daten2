@@ -1,0 +1,52 @@
+{
+  "name": "n8n-nodes-npp-act",
+  "version": "1.0.0",
+  "description": "Узел n8n для NPP-Act: вызов объявленного глагола через рантайм-шлюз — решение губернатора до исполнения, журнал после",
+  "license": "MIT",
+  "homepage": "https://github.com/svend4/daten2/tree/main/act",
+  "author": {
+    "name": "svend4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/svend4/daten2.git",
+    "directory": "act/integrations/n8n"
+  },
+  "main": "nodes/NppAct/NppAct.node.js",
+  "keywords": [
+    "n8n-community-node-package",
+    "n8n",
+    "npp-act",
+    "nautilus",
+    "actionable",
+    "governor",
+    "consent",
+    "idempotency"
+  ],
+  "engines": {
+    "node": ">=18.17"
+  },
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "nodes": [
+      "nodes/NppAct/NppAct.node.js"
+    ],
+    "credentials": []
+  },
+  "files": [
+    "nodes",
+    "README.md"
+  ],
+  "scripts": {
+    "check": "node --check nodes/NppAct/NppAct.node.js"
+  },
+  "dependencies": {},
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  },
+  "peerDependenciesMeta": {
+    "n8n-workflow": {
+      "optional": true
+    }
+  }
+}

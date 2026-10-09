@@ -1,0 +1,162 @@
+{
+  "node": "n8n-nodes-npp-act.nppAct",
+  "nodeVersion": "1.0",
+  "codexVersion": "1.0",
+  "categories": ["Development", "Utility"],
+  "subcategories": {
+    "Development": ["Protocol", "Agent Governance"]
+  },
+  "alias": [
+    "NPP",
+    "NPP-Act",
+    "Nautilus",
+    "Actionable",
+    "governor",
+    "губернатор",
+    "consent",
+    "idempotency",
+    "dry run"
+  ],
+  "resources": {
+    "primaryDocumentation": [
+      {
+        "url": "https://github.com/svend4/daten2/blob/main/act/SPEC-NPP-ACT.md"
+      },
+      {
+        "url": "https://github.com/svend4/daten2/blob/main/act/integrations/n8n/README.md"
+      }
+    ],
+    "generic": []
+  },
+  "npp_act": {
+    "spec": "1.0",
+    "comment": "Поля ниже — не часть кодекса n8n (n8n лишние ключи игнорирует). Они объявлены здесь затем, чтобы контракт узла можно было проверить тестом, не разбирая JS: тест сверяет эти имена с NppAct.node.js и с эндпоинтами рантайма.",
+    "roles": {
+      "catalog": "Наутилус — что существует",
+      "consequence": "NPP-Act — что будет, если вызвать",
+      "execution": "n8n — как вызвать и связать",
+      "restraint": "губернатор + журнал — вправе ли агент это вызывать"
+    },
+    "not_a_safety_boundary": "Узел — поле ввода в редакторе, а не гейт. Удержание живёт в рантайме NPP-Act; узел обязан ходить через POST /act/perform и не имеет HTTP-клиента к сервисам.",
+    "runtime": {
+      "perform": { "method": "POST", "path": "/act/perform" },
+      "catalog": { "method": "GET", "path": "/act/catalog" },
+      "confirm": { "method": "POST", "path": "/act/confirm" },
+      "health": { "method": "GET", "path": "/api/health", "expect": { "runtime": "npp-act" } },
+      "request_body": ["service", "verb", "payload", "idempotency_key", "dry_run", "hold"]
+    },
+    "parameters": [
+      {
+        "name": "operation",
+        "type": "options",
+        "default": "perform",
+        "values": ["perform", "catalog"],
+        "display": "Операция"
+      },
+      {
+        "name": "gatewayUrl",
+        "type": "string",
+        "required": true,
+        "default": "http://127.0.0.1:8200",
+        "display": "Адрес рантайм-шлюза",
+        "note": "корень рантайма NPP-Act, не адрес сервиса"
+      },
+      {
+        "name": "catalogSource",
+        "type": "options",
+        "default": "gateway",
+        "values": ["gateway", "manifest"],
+        "display": "Источник каталога"
+      },
+      {
+        "name": "manifestUrl",
+        "type": "string",
+        "default": "",
+        "display": "URL манифеста",
+        "note": "/.well-known/npp-act.json — только чтение объявления"
+      },
+      {
+        "name": "service",
+        "type": "options",
+        "loadOptionsMethod": "getServices",
+        "display": "Сервис"
+      },
+      {
+        "name": "verb",
+        "type": "options",
+        "loadOptionsMethod": "getVerbs",
+        "display": "Глагол"
+      },
+      {
+        "name": "payload",
+        "type": "json",
+        "default": "{}",
+        "display": "Параметры входа",
+        "note": "по схеме input из манифеста глагола"
+      },
+      {
+        "name": "idempotencyKey",
+        "type": "string",
+        "default": "",
+        "display": "Ключ идемпотентности",
+        "note": "обязателен для effect=commit и effect=money (SPEC §4.5)"
+      },
+      {
+        "name": "hold",
+        "type": "json",
+        "default": "{}",
+        "display": "Удержание",
+        "note": "{hold_id, expires_at} от парного reserve-глагола"
+      },
+      {
+        "name": "dryRun",
+        "type": "boolean",
+        "default": true,
+        "display": "Сухой прогон",
+        "note": "только решение губернатора, без исполнения; включено по умолчанию"
+      },
+      {
+        "name": "preflight",
+        "type": "boolean",
+        "default": true,
+        "display": "Спросить губернатора перед исполнением",
+        "note": "удобство, а не гарантия: гарантия — губернатор в рантайме"
+      },
+      {
+        "name": "verifyGateway",
+        "type": "boolean",
+        "default": true,
+        "display": "Проверить, что по адресу рантайм",
+        "note": "GET /api/health должен вернуть runtime=\"npp-act\""
+      },
+      {
+        "name": "failOnBlock",
+        "type": "boolean",
+        "default": false,
+        "display": "Падать при отказе губернатора",
+        "note": "по умолчанию решение приходит в выходной элемент, workflow ветвится сам"
+      },
+      {
+        "name": "timeoutMs",
+        "type": "number",
+        "default": 30000,
+        "display": "Таймаут, мс"
+      }
+    ],
+    "output": [
+      "service",
+      "verb",
+      "dry_run",
+      "verdict",
+      "reason",
+      "alternative",
+      "checks",
+      "executed",
+      "stopped_by",
+      "budget_remaining",
+      "result",
+      "status",
+      "ok"
+    ]
+  }
+}
