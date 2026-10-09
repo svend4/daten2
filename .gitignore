@@ -23,3 +23,7 @@ flask_session/
 # --- Служебное ---
 .DS_Store
 *.sqlite3-journal
+
+# --- NPP-Act ---
+*.jsonl
+npp_venue.db

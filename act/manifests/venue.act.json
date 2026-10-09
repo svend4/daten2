@@ -1,0 +1,75 @@
+{
+  "npp_act": "1.0",
+  "service": "venue-clinic-nord",
+  "title": "Клиника «Норд» — запись к специалисту",
+  "base_url": "http://127.0.0.1:8210",
+  "profile": "venue",
+  "q6": "101100",
+  "capabilities": [
+    {
+      "id": "slot.list",
+      "title": "Свободные слоты",
+      "description": "Каталог свободного времени специалистов. Ничего не меняет.",
+      "effect": "read",
+      "reversible": false,
+      "cost": { "money": 0, "time_s": 0.1 },
+      "consent": "none",
+      "binding": { "protocol": "http", "method": "GET", "path": "/api/slots" },
+      "input": { "day": "string?", "specialist": "string?" },
+      "output": { "": "array of slot" }
+    },
+    {
+      "id": "slot.hold",
+      "title": "Удержать слот",
+      "description": "Обратимое удержание на 120 секунд. Истекает само, если бронь не подтверждена.",
+      "effect": "reserve",
+      "reversible": true,
+      "reverse": "slot.release",
+      "expires_s": 120,
+      "cost": { "money": 0, "time_s": 0.2 },
+      "consent": "none",
+      "idempotency": "field:hold_key",
+      "binding": { "protocol": "http", "method": "POST", "path": "/api/holds" },
+      "input": { "slot_id": "integer" },
+      "output": { "hold_id": "string", "expires_at": "string" }
+    },
+    {
+      "id": "slot.release",
+      "title": "Отпустить удержание",
+      "description": "Обратный глагол к slot.hold. Возвращает слот в свободные.",
+      "effect": "reserve",
+      "reversible": false,
+      "expires_s": 0,
+      "cost": { "money": 0, "time_s": 0.1 },
+      "consent": "none",
+      "binding": { "protocol": "http", "method": "DELETE", "path": "/api/holds/{hold_id}" },
+      "input": { "hold_id": "string" },
+      "output": { "released": "boolean" }
+    },
+    {
+      "id": "booking.create",
+      "title": "Подтвердить запись",
+      "description": "Необратимое обязательство. Требует действующего удержания и согласия обеих сторон.",
+      "effect": "commit",
+      "reversible": false,
+      "cost": { "money": "variable", "currency": "EUR", "time_s": 0.3 },
+      "consent": "two_party",
+      "idempotency": "header:Idempotency-Key",
+      "binding": { "protocol": "http", "method": "POST", "path": "/api/bookings" },
+      "input": { "hold_id": "string", "name": "string", "note": "string?", "max_money": "number?" },
+      "output": { "booking_number": "string", "total": "number", "currency": "string" }
+    },
+    {
+      "id": "booking.get",
+      "title": "Посмотреть запись",
+      "description": "Чтение по непубличному токену (не по инкрементному id).",
+      "effect": "read",
+      "reversible": false,
+      "cost": { "money": 0, "time_s": 0.1 },
+      "consent": "none",
+      "binding": { "protocol": "http", "method": "GET", "path": "/api/bookings/{booking_number}" },
+      "input": { "booking_number": "string" },
+      "output": { "booking_number": "string", "day": "string", "time": "string" }
+    }
+  ]
+}

@@ -1,0 +1,73 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "NPP-Act Capability Manifest v1.0",
+  "description": "Манифест возможностей Actionable-сервиса (уровень совместимости 4 Nautilus Portal Protocol)",
+  "type": "object",
+  "required": ["npp_act", "service", "base_url", "profile", "capabilities"],
+  "properties": {
+    "npp_act": { "const": "1.0" },
+    "service": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$" },
+    "title": { "type": "string" },
+    "base_url": { "type": "string", "pattern": "^https?://" },
+    "profile": {
+      "type": "string",
+      "enum": ["person", "vendor", "venue", "institution", "broker"],
+      "description": "Роль сервиса в экосистеме"
+    },
+    "q6": { "type": "string", "pattern": "^[01]{6}$", "description": "Адрес в пространстве Q6 (NPP v1.2 §9)" },
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/definitions/capability" }
+    }
+  },
+  "definitions": {
+    "capability": {
+      "type": "object",
+      "required": ["id", "title", "effect", "reversible", "cost", "consent", "binding"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "effect": {
+          "type": "string",
+          "enum": ["read", "reserve", "commit", "money", "destroy"],
+          "description": "Что глагол делает с миром. Тяжесть монотонна."
+        },
+        "reversible": { "type": "boolean" },
+        "reverse": { "type": "string", "description": "id обратного глагола; REQUIRED если reversible=true" },
+        "cost": {
+          "type": "object",
+          "required": ["money"],
+          "properties": {
+            "money": {
+              "oneOf": [{ "type": "number", "minimum": 0 }, { "const": "variable" }]
+            },
+            "currency": { "type": "string" },
+            "time_s": { "type": "number", "minimum": 0 }
+          }
+        },
+        "consent": {
+          "type": "string",
+          "enum": ["none", "notify", "confirm", "two_party"]
+        },
+        "idempotency": {
+          "type": "string",
+          "pattern": "^(none|header:[-A-Za-z0-9]+|field:[a-z_]+)$"
+        },
+        "expires_s": { "type": "number", "description": "Срок жизни удержания для effect=reserve" },
+        "binding": {
+          "type": "object",
+          "required": ["protocol", "method", "path"],
+          "properties": {
+            "protocol": { "const": "http" },
+            "method": { "type": "string", "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"] },
+            "path": { "type": "string", "pattern": "^/" }
+          }
+        },
+        "input": { "type": "object" },
+        "output": { "type": "object" }
+      }
+    }
+  }
+}

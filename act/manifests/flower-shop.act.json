@@ -1,0 +1,64 @@
+{
+  "npp_act": "1.0",
+  "service": "flower-shop",
+  "title": "Магазин цветов — единый контракт семи уровней",
+  "base_url": "http://127.0.0.1:8181",
+  "profile": "vendor",
+  "q6": "100101",
+  "capabilities": [
+    {
+      "id": "catalog.list",
+      "title": "Каталог активных товаров",
+      "description": "GET /api/products единого контракта daten2. Работает на любом из семи уровней.",
+      "effect": "read",
+      "reversible": false,
+      "cost": { "money": 0, "time_s": 0.1 },
+      "consent": "none",
+      "binding": { "protocol": "http", "method": "GET", "path": "/api/products" },
+      "input": {},
+      "output": { "": "array of product" }
+    },
+    {
+      "id": "order.create",
+      "title": "Оформить заказ",
+      "description": "POST /api/orders. Необратим: отмены в контракте v1 нет, поэтому требуется подтверждение.",
+      "effect": "commit",
+      "reversible": false,
+      "cost": { "money": "variable", "currency": "EUR", "time_s": 0.3 },
+      "consent": "confirm",
+      "idempotency": "field:client_token",
+      "binding": { "protocol": "http", "method": "POST", "path": "/api/orders" },
+      "input": {
+        "name": "string",
+        "phone": "string?",
+        "items": "array of {product_id, qty}",
+        "max_money": "number?"
+      },
+      "output": { "order_number": "string", "total": "number" }
+    },
+    {
+      "id": "order.get",
+      "title": "Посмотреть заказ",
+      "description": "GET /api/orders/{order_number} по непубличному токену.",
+      "effect": "read",
+      "reversible": false,
+      "cost": { "money": 0, "time_s": 0.1 },
+      "consent": "none",
+      "binding": { "protocol": "http", "method": "GET", "path": "/api/orders/{order_number}" },
+      "input": { "order_number": "string" },
+      "output": { "order": "object", "items": "array" }
+    },
+    {
+      "id": "health.check",
+      "title": "Живость и номер уровня",
+      "description": "GET /api/health. Отвечает, какой из семи уровней сейчас за контрактом.",
+      "effect": "read",
+      "reversible": false,
+      "cost": { "money": 0, "time_s": 0.05 },
+      "consent": "none",
+      "binding": { "protocol": "http", "method": "GET", "path": "/api/health" },
+      "input": {},
+      "output": { "ok": "boolean", "level": "integer", "stack": "string" }
+    }
+  ]
+}
