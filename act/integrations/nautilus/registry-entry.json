@@ -1,0 +1,10 @@
+{
+  "repo": "svend4/daten2",
+  "adapter": "npp_act",
+  "name": "npp_act",
+  "format": "daten2-act",
+  "compatibility": 4,
+  "passport": "passports/npp_act.md",
+  "act_manifest": "act/manifests/flower-shop.act.json",
+  "note": "NPP-Act 1.0 — уровень 4 (Actionable): манифест глаголов + губернатор + журнал. Единица — действие, а не документ. format_type='action' деградирует к 'document' по §4.1."
+}

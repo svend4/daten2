@@ -63,6 +63,7 @@ class Governor:
         budget: Budget,
         escalate_fraction: float = 0.5,
         confirmations: set[str] | None = None,
+        schedule_guard=None,
     ):
         self.registry = registry
         self.ledger = ledger
@@ -70,6 +71,15 @@ class Governor:
         self.escalate_fraction = escalate_fraction
         #: ключи уже полученных подтверждений человека/второй стороны
         self.confirmations: set[str] = confirmations or set()
+        #: Предикат H8 (schedule_guard.ScheduleGuard) — необязателен намеренно.
+        #: Губернатор без него обязан вести себя ровно как прежде: время
+        #: обязательства знает не протокол, а владелец расписания, и навязывать
+        #: проверку тому, кто расписания не объявил, означало бы отказывать по
+        #: основанию, которого он не заявлял.
+        #: Тип не объявлен и класс не импортируется сознательно: иначе гейт
+        #: потянул бы за собой карту времени при каждом импорте. Губернатору
+        #: достаточно трёх методов — check / reason / alternative.
+        self.schedule_guard = schedule_guard
 
     # ---------- вспомогательное ----------
 
@@ -173,6 +183,22 @@ class Governor:
                     self._cheaper(cap, payload),
                 )
             checks.append(f"H3 бюджет выдерживает ({estimate:.2f} ≤ {self.budget.remaining:.2f})")
+
+        # --- H8: конфликт расписания (§5.1.8) ---
+        # Только для обязательств: удержание обратимо и само истекает, поэтому
+        # запрещать попытку занять время было бы запретом на разведку — агент
+        # должен иметь право подержать слот, увидеть конфликт и отпустить его.
+        # Арифметика неисполнимости живёт в schedule_guard/calendar: губернатор
+        # лишь спрашивает и, если ответ непустой, отказывает их же словами.
+        if cap.is_committing and self.schedule_guard is not None:
+            conflicts = self.schedule_guard.check(service, verb_id, payload, manifest)
+            if conflicts:
+                return block(
+                    self.schedule_guard.reason(conflicts),
+                    self.schedule_guard.alternative(
+                        service, verb_id, payload, manifest, conflicts),
+                )
+            checks.append("H8 расписание вмещает обязательство")
 
         # --- S2: переменная цена без потолка ---
         if cap.money_is_variable and estimate is None:

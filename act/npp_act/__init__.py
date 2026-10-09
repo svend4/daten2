@@ -15,6 +15,9 @@
     market     — переговоры двух агентов
     settlement — двойная запись, эскроу, saga-клиринг
     calendar   — карта обязательств во времени и обнаружение конфликтов
+    schedule_guard — предикат H8: неисполнимое расписание блокируется до действия
+    prober     — измерение живого сервиса вместо веры его манифесту
+    credential — переносимое свидетельство о выполненной работе
 """
 
 __version__ = "1.0"
@@ -30,6 +33,9 @@ from .router import CapabilityRouter, RouteDecision, RouterError
 from .settlement import Book, SettlementError
 from .market import Deal, Party, Preference
 from .calendar import Conflict, Entry, build_timeline, detect_conflicts, explain
+from .schedule_guard import ScheduleGuard
+from .prober import Discrepancy, MeasuredProfile, ProbeError, Prober, measure
+from .credential import Credential, CredentialError, Portfolio, issue, sign, verify
 
 __all__ = [
     # ядро
@@ -47,4 +53,8 @@ __all__ = [
     "Deal", "Party", "Preference",
     # время
     "Conflict", "Entry", "build_timeline", "detect_conflicts", "explain",
+    "ScheduleGuard",
+    # доверие: измерение вместо заявления, свидетельство вместо звёздочек
+    "Prober", "MeasuredProfile", "Discrepancy", "ProbeError", "measure",
+    "Credential", "CredentialError", "Portfolio", "issue", "sign", "verify",
 ]
