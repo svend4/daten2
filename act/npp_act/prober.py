@@ -54,6 +54,17 @@
 зовётся `id`, а во входе глагола — `<ресурс>_id`. Эта связка объявлена здесь
 явно (`_lookup`), а не размазана по коду.
 
+Массив во входе — отдельный случай, выясненный на живом уровне 1 daten2.
+Пустой список, которым проба заполняла `items`, магазин законно отвергал
+(`400 name/items required`), а проба записывала отказ ему в несоответствие
+контракту: измеренные 2/3 против заявленных 22/22, то есть ЛОЖНОЕ обвинение в
+приукрашивании. Неспособность пробы собрать вход не должна превращаться в
+дефект сервиса. Поэтому форма позиции читается из самой спецификации
+(`array of {product_id, quantity}` → `_element_keys`), а значения для её полей
+добываются теми же правилами, что и для верхнего уровня: ручка — только
+наблюдением, количество — по единственной предметной догадке модуля
+(`QTY_KEYS`), остальное — заглушкой.
+
 Запуск:
     python3 -m act.npp_act.prober --manifest act/manifests/venue.act.json \\
             --base-url http://127.0.0.1:8210 [--json]
@@ -339,6 +350,33 @@ def check_shape(declared: dict[str, Any], body: Any) -> tuple[bool, list[str]]:
 
 def _is_handle(key: str) -> bool:
     return key.endswith(HANDLE_SUFFIXES)
+
+
+def _element_keys(spec: Any) -> tuple[str, ...]:
+    """Имена полей элемента из спецификации вида `array of {product_id, quantity}`.
+
+    Зачем это нужно и почему это НЕ домысел о предметной области. Массив во
+    входе глагола проба раньше заполняла пустым списком — и живой уровень 1
+    daten2 законно отвечал `400 name/items required`. Проба записывала это
+    себе в зачёт как «глагол не ответил по своей схеме» и обвиняла сервис в
+    приукрашивании соответствия контракту (измерено 2/3 против заявленных
+    22/22). Обвинение было ложным: сервис исполнял контракт, а собрать заказ
+    не умела проба.
+
+    Форму позиции объявляет сам манифест — строкой `array of {a, b}`. Читать
+    её и значит верить манифесту в том, что он ОБЪЯВЛЯЕТ, продолжая не верить
+    ему в том, что он УТВЕРЖДАЕТ о своём поведении. Выдумывания здесь нет:
+    имена полей взяты из манифеста, а значения для них добываются ровно по тем
+    же правилам, что и для полей верхнего уровня (ручку — только наблюдением).
+    """
+    if not isinstance(spec, str):
+        return ()
+    body = spec.strip().rstrip("?")
+    start, end = body.find("{"), body.rfind("}")
+    if start < 0 or end < start:
+        return ()
+    names = [part.strip() for part in body[start + 1:end].split(",")]
+    return tuple(name for name in names if name)
 
 
 def _fresh_key(cap: Capability, prefix: str = "probe") -> str | None:
@@ -669,6 +707,11 @@ class Prober:
              проба сузила каталог до одного дня и потом объявила, что
              параллель измерять не на чем. Фильтр, взятый из предыдущего
              ответа, превращает пробу в разговор с собственным эхом.
+
+        Массив с объявленной формой элемента (`array of {product_id, quantity}`)
+        заполняется ОДНОЙ позицией, а не пустым списком: пустой заказ — это не
+        заказ, и сервис, отвергнувший его, прав. Одна позиция, а не несколько,
+        потому что контракт проверяется формой ответа, а не объёмом заказа.
         """
         payload: dict[str, Any] = {}
         missing: list[str] = []
@@ -679,6 +722,18 @@ class Prober:
             base, optional = _spec_base(spec)
             in_path = ("{" + key + "}") in path
             if optional and not in_path:
+                continue
+            element = _element_keys(spec) if base == "array" else ()
+            if element:
+                line, lost = self._synth_element(element, allow_severity, ensure,
+                                                 exclude or cap.id)
+                if lost:
+                    # Недостающую ручку внутри позиции называем вместе с путём
+                    # до неё: «order.create пропущен из-за items» непонятно,
+                    # «items[].product_id» показывает, чего именно не хватило.
+                    missing.extend(f"{key}[].{name}" for name in lost)
+                    continue
+                payload[key] = [line]
                 continue
             value = self._lookup(key)
             if value is None and ensure:
@@ -693,6 +748,36 @@ class Prober:
                          "boolean": False, "array": [], "object": {}}.get(base, _SYNTH_TEXT)
             payload[key] = value
         return payload, missing
+
+    def _synth_element(self, keys: tuple[str, ...], allow_severity: int,
+                       ensure: bool, exclude: str) -> tuple[dict[str, Any], list[str]]:
+        """Одна позиция массива по объявленной форме элемента.
+
+        Типов полей элемента манифест не объявляет — только имена. Поэтому
+        порядок добывания значения такой, и каждая ступень объяснима:
+
+          1. живое наблюдённое значение под этим именем (`product_id` →
+             `id` из каталога) — единственный честный источник ручки;
+          2. ручка, которую наблюсти не удалось, делает позицию несобираемой:
+             выдуманный `product_id` дал бы 404, то есть обвинил сервис в
+             ошибке пробы;
+          3. поле количества (`QTY_KEYS` — та самая единственная предметная
+             догадка модуля, объявленная вверху файла и здесь не умножаемая) → 1;
+          4. всё остальное — та же текстовая заглушка, что и у скаляра.
+        """
+        line: dict[str, Any] = {}
+        lost: list[str] = []
+        for key in keys:
+            value = self._lookup(key)
+            if value is None and ensure:
+                value = self._ensure(key, allow_severity, exclude=exclude)
+            if value is None:
+                if _is_handle(key):
+                    lost.append(key)
+                    continue
+                value = 1 if key in QTY_KEYS else _SYNTH_TEXT
+            line[key] = value
+        return line, lost
 
     # ---------- уборка ----------
 
@@ -848,27 +933,49 @@ class Prober:
                 f"заказ не собрать", {"verb": cap.id},
             )
 
+        # Завышаем количество в УЖЕ собранном входе, а не собираем заказ заново
+        # своими руками. Прежняя версия подставляла позицию
+        # `{"product_id": …, "quantity": …, "qty": …}` — три имени, которых
+        # могло не быть в манифесте вовсе, причём два взаимоисключающих сразу,
+        # «чтобы хоть одно подошло». Это уже не измерение контракта, а догадка
+        # о чужом формате: сервис с другим именем поля ответил бы 400, и проба
+        # записала бы свою неудачу ему в дефекты. Имена полей позиции объявлены
+        # манифестом (`array of {product_id, quantity}`), оттуда их и берём.
+        line: dict[str, Any] = {}
         if kind == "scalar":
             payload[field_name] = ABSURD_QUANTITY
+            bumped = field_name
         else:
-            item_id = self._lookup("product_id") or self._lookup("id")
-            if item_id is None:
+            lines = payload.get(field_name) or []
+            if not lines:
                 return ProbeResult(
                     STOCK, False, None,
-                    f"{cap.id}: каталог не дал ни одной позиции — заказ не собрать",
+                    f"{cap.id}: '{field_name}' объявлен массивом без формы элемента — "
+                    f"позицию заказа пришлось бы выдумать", {"verb": cap.id},
+                )
+            line = dict(lines[0])
+            qty_fields = [k for k in line if k in QTY_KEYS]
+            if not qty_fields:
+                return ProbeResult(
+                    STOCK, False, None,
+                    f"{cap.id}: в объявленной позиции заказа {sorted(line)} нет поля "
+                    f"количества (искали {list(QTY_KEYS)}) — завышать нечего",
                     {"verb": cap.id},
                 )
-            payload[field_name] = [{"product_id": item_id, "quantity": ABSURD_QUANTITY,
-                                    "qty": ABSURD_QUANTITY}]
+            for name in qty_fields:
+                line[name] = ABSURD_QUANTITY
+            payload[field_name] = [line]
+            bumped = f"{field_name}[].{'/'.join(sorted(qty_fields))}"
         status, body, _ = self._invoke(cap, payload, idem_key=_fresh_key(cap, "stock"))
         accepted = 200 <= status < 300
         evidence = (
-            f"{cap.id} с {field_name}={ABSURD_QUANTITY} → HTTP {status}: "
+            f"{cap.id} с {bumped}={ABSURD_QUANTITY} → HTTP {status}: "
             + ("ПРИНЯТ, значит остаток не читается" if accepted
                else f"отвергнут ({str((body or {}).get('error', ''))[:120]})")
         )
         return ProbeResult(STOCK, True, not accepted, evidence,
-                           {"verb": cap.id, "field": field_name, "quantity": ABSURD_QUANTITY,
+                           {"verb": cap.id, "field": field_name, "bumped": bumped,
+                            "line": line, "quantity": ABSURD_QUANTITY,
                             "status": status, "accepted": accepted})
 
     # ---------- проба 3: конкурентность ----------

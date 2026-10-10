@@ -37,29 +37,68 @@
 если обязательства нет в обеих цепях или цепи не целы. В этом вся разница со
 звёздочками — выдать можно только то, что уже произошло.
 
-ПРО ПОДПИСЬ: ЧЕСТНАЯ ОГОВОРКА (НЕ ПРОПУСКАТЬ)
----------------------------------------------
-Клеймо мастера здесь — HMAC-SHA256 из стандартной библиотеки. Это
-СИММЕТРИЧНАЯ схема, и она НЕ решает задачу публичной проверки:
+ПРО ПОДПИСЬ: ТЕПЕРЬ АСИММЕТРИЧНАЯ, И ЭТО МЕНЯЕТ СУТЬ
+---------------------------------------------------
+Раньше клеймо мастера было HMAC-SHA256 — симметричной схемой, при которой
+проверить подпись может только владелец секрета issuer, а кто может проверить,
+тот может и подделать. Переносимой репутации при таком клейме не существует.
 
-  * проверить подпись может только тот, у кого есть тот же секрет, что у issuer;
-  * кто может проверить — тот может и подделать: ключ один и тот же.
+Теперь подпись — Ed25519 (RFC 8032, реализация `npp_act/crypto/ed25519.py`,
+чистый Python, без зависимостей). Секрет остаётся у issuer, ПУБЛИЧНЫЙ ключ
+уезжает в самом свидетельстве и публикуется в паспорте, и `verify()` проверяет
+подпись, не имея никаких секретов. Это и есть переносимость: третья сторона,
+которая никогда не разговаривала ни с сервисом, ни с issuer, проверяет письмо
+сама.
 
-Для настоящей переносимости нужна асимметричная подпись (Ed25519: секрет у
-issuer, публичный ключ у всех, подделать нельзя), а её в stdlib Python без
-внешних зависимостей нет. Притворяться, что HMAC её заменяет, здесь не будем:
-`alg` объявлен в свидетельстве полем, а `verify()` без ключа прямо говорит
-«подпись не проверена», а не «свидетельство недействительно».
+ЧЕТЫРЕ УРОВНЯ ДОВЕРИЯ К ПОДПИСИ — ИХ НЕЛЬЗЯ ПУТАТЬ
+--------------------------------------------------
+Асимметричная подпись не делает любое письмо достоверным, и подменять одно
+другим было бы тем же самообманом, от которого ушли:
 
-И тем не менее свидетельство остаётся проверяемым без всякого ключа — потому
-что доказывает работу не подпись, а ДВЕ НЕЗАВИСИМЫЕ ХЭШ-ЦЕПИ. `work_proven()`
-проверяет ровно это: обязательство есть в журналах обеих сторон, цепи целы,
-issuer и subject — действительно его стороны, и описанная работа совпадает с
-предметом обязательства. Подпись добавляет к этому только одно: что письмо
-написал именно тот, кто называется issuer. Поэтому подмена issuer ловится
-здесь ДВАЖДЫ — и подписью (если ключ есть), и записью в цепи (всегда).
+  `public`   — Ed25519, подпись сошлась с публичным ключом issuer, который
+               проверяющий знает НЕЗАВИСИМО от письма (из паспорта). Только это
+               и означает «публично проверено»: ни секрета, ни веры письму.
+  `declared` — Ed25519, подпись сошлась с ключом, названным В САМОМ ПИСЬМЕ.
+               Так проверена целостность текста, но НЕ личность issuer: кто
+               угодно может завести свою пару ключей, вписать себя issuer-ом
+               настоящего обязательства (хэши-привязки видны в любом честном
+               письме) и подписать это своим ключом. Поэтому `declared` —
+               не «проверено», а «подписано неизвестно чьим ключом».
+  `secret`   — HMAC-SHA256, подпись сошлась с общим секретом. Унаследованная
+               схема: проверяется, но не переносится.
+  `none`     — подписи нет, не сошлась или алгоритм неизвестен.
 
-Зависимостей нет: hmac, hashlib, json из стандартной библиотеки.
+Старые свидетельства с `alg="hmac-sha256"` продолжают проверяться — поле `alg`
+для этого и было объявлено с самого начала, и форма подписываемого тела
+привязана к нему: поле `public_key` входит в тело подписи только у ed25519,
+иначе добавление поля задним числом сделало бы недействительными все ранее
+выданные письма.
+
+И по-прежнему главное: работу доказывает не подпись, а ДВЕ НЕЗАВИСИМЫЕ
+ХЭШ-ЦЕПИ. `work_proven()` проверяет, что обязательство есть в журналах обеих
+сторон, цепи целы, issuer и subject — действительно его стороны, а описанная
+работа совпадает с предметом обязательства. Подпись добавляет к этому ровно
+одно: что письмо написал тот, кто называется issuer. Поэтому подмена issuer
+ловится здесь ДВАЖДЫ — подписью (если известен ключ) и записью в цепи (всегда).
+
+ДЛЯ СПЕЦИФИКАЦИИ (готовый абзац, координатору — перенести)
+----------------------------------------------------------
+    Свидетельство о выполненной работе ДОЛЖНО быть проверяемо третьей стороной
+    без обращения к issuer, к сервису и к любому секрету. Подпись ДОЛЖНА быть
+    асимметричной (Ed25519, RFC 8032); публичный ключ issuer ДОЛЖЕН
+    присутствовать в свидетельстве и ДОЛЖЕН публиковаться в паспорте стороны.
+    Реализация ОБЯЗАНА различать четыре уровня проверки подписи — `public`
+    (ключ известен проверяющему независимо от свидетельства), `declared` (ключ
+    взят из самого свидетельства: проверена целостность текста, но не личность
+    issuer), `secret` (симметричная унаследованная схема) и `none` — и НЕ
+    ДОЛЖНА выдавать `declared` за `public`. Публично проверяемым свидетельство
+    СЧИТАЕТСЯ только при уровне `public`. Симметричная подпись (HMAC-SHA256)
+    ДОПУСКАЕТСЯ для ранее выданных свидетельств и НЕ СЧИТАЕТСЯ публично
+    проверяемой. Доказательством самой работы во всех случаях остаются две
+    независимые хэш-цепи сторон, а не подпись.
+
+Зависимостей нет: hmac, hashlib, json из стандартной библиотеки плюс
+собственный Ed25519 на чистом Python.
 """
 
 from __future__ import annotations
@@ -72,21 +111,45 @@ from datetime import datetime, timezone
 from typing import Any, Iterable, Iterator, Mapping
 
 from .agent import Commitment
+from .crypto import ed25519
 from .ledger import Ledger, LedgerError
 
 #: Шкала оценки. Пять градаций, как у цеховой записи «похвально — с оговорками»:
 #: шире шкала не делает её точнее, зато делает несравнимой между цехами.
 RATING_MIN, RATING_MAX = 1, 5
 
-#: Алгоритм клейма. Строкой и в самом свидетельстве — чтобы предъявленное
+#: Алгоритмы клейма. Строкой и в самом свидетельстве — чтобы предъявленное
 #: письмо само говорило, чем оно подписано, а не оставляло это допущением.
 ALG_HMAC = "hmac-sha256"
+ALG_ED25519 = "ed25519"
+
+#: Уровни проверки подписи, от полного к никакому. Подробно — в заголовке
+#: модуля; коротко: только `public` означает «проверено публично».
+LEVEL_PUBLIC = "public"
+LEVEL_DECLARED = "declared"
+LEVEL_SECRET = "secret"
+LEVEL_NONE = "none"
+
+#: Объяснения уровней для человека. Живут рядом с кодом, а не в документации,
+#: потому что их печатает сводка портфолио — а не только читает разработчик.
+LEVELS: dict[str, str] = {
+    LEVEL_PUBLIC: "проверено публично: Ed25519, ключ issuer известен "
+                  "независимо от свидетельства",
+    LEVEL_DECLARED: "подписано ключом из самого свидетельства: проверена "
+                    "целостность текста, но не личность issuer",
+    LEVEL_SECRET: "проверено с секретом: HMAC-SHA256, симметричная схема — "
+                  "кто может проверить, тот может и подделать",
+    LEVEL_NONE: "подпись не проверена",
+}
 
 #: Метки домена. Без них один и тот же ключ, использованный где-то ещё под
 #: HMAC, дал бы совпадающие значения, и подпись свидетельства можно было бы
-#: добыть из постороннего протокола.
+#: добыть из постороннего протокола. У Ed25519 метка своя — чтобы подпись,
+#: снятая с одного вида документа, не подходила к другому.
 _SIG_LABEL = b"npp-act/credential/signature/v1\x00"
 _KID_LABEL = b"npp-act/credential/key-id/v1"
+_ED_LABEL = b"npp-act/credential/ed25519/v1\x00"
+_PKID_LABEL = b"npp-act/credential/public-key-id/v1"
 
 
 class CredentialError(RuntimeError):
@@ -122,9 +185,96 @@ def key_id(key: str | bytes) -> str:
     return "kid_" + hmac.new(_as_bytes(key), _KID_LABEL, hashlib.sha256).hexdigest()[:16]
 
 
+def public_key_id(public: str | bytes) -> str:
+    """Отпечаток ПУБЛИЧНОГО ключа: короткое «как выглядит клеймо».
+
+    В отличие от `key_id()` вычисляется из общедоступного значения, поэтому его
+    может посчитать любой — и сверить, что три письма в папке подписаны одним и
+    тем же ключом, не спрашивая issuer. Это и есть цеховое клеймо: его узнают,
+    а не доверяют на слово.
+    """
+    raw = ed25519.public_hex(public)
+    return "pk_" + hashlib.sha256(_PKID_LABEL + bytes.fromhex(raw)).hexdigest()[:16]
+
+
+@dataclass(frozen=True)
+class SigningKey:
+    """Пара ключей issuer: секрет остаётся у мастера, публичный уезжает в письме.
+
+    Отдельным типом, а не просто двумя строками, по двум причинам. Во-первых,
+    тип — это и есть способ выбрать алгоритм: `sign(cred, "строка")` остаётся
+    унаследованным HMAC, `sign(cred, SigningKey(...))` — Ed25519. Угадывать
+    схему по длине ключа было бы ровно тем сортом догадки, из-за которого
+    потом неясно, чем подписано письмо.
+
+    Во-вторых, `__repr__` переопределён: приватный ключ не должен попадать в
+    логи и трассировки просто потому, что кто-то напечатал объект.
+    """
+
+    private: str
+    public: str
+    alg: str = ALG_ED25519
+
+    @property
+    def key_id(self) -> str:
+        return public_key_id(self.public)
+
+    def passport_block(self, who: str = "") -> dict[str, Any]:
+        """Публичная часть для паспорта стороны. Секрета здесь нет по построению.
+
+        Паспорт — то независимое место, откуда проверяющий берёт ключ, чтобы
+        проверка дала уровень `public`, а не `declared`. Поэтому блок содержит
+        ровно то, что можно публиковать, и ничего больше.
+        """
+        block = {"alg": self.alg, "public_key": self.public, "key_id": self.key_id}
+        if who:
+            block["profile"] = who
+        return block
+
+    def __repr__(self) -> str:  # приватный ключ не печатаем
+        return f"SigningKey(alg={self.alg!r}, public={self.public!r}, key_id={self.key_id!r})"
+
+    __str__ = __repr__
+
+
+def new_issuer_key(seed: str | bytes | None = None) -> SigningKey:
+    """Создать пару ключей issuer.
+
+    Без `seed` ключ берётся из CSPRNG операционной системы. `seed` принимается
+    для воспроизводимых прогонов и для восстановления ключа из сохранённых
+    32 байт — публичный ключ при этом получается тот же, так что паспорт не
+    приходится хранить второй копией.
+    """
+    private, public = ed25519.keypair(seed)
+    return SigningKey(private=private, public=public)
+
+
 def _sign(body: dict[str, Any], key: str | bytes) -> str:
     msg = _SIG_LABEL + _canonical(body).encode("utf-8")
     return "hs256:" + hmac.new(_as_bytes(key), msg, hashlib.sha256).hexdigest()
+
+
+def _ed_message(body: dict[str, Any]) -> bytes:
+    return _ED_LABEL + _canonical(body).encode("utf-8")
+
+
+def _sign_ed(body: dict[str, Any], private: str | bytes) -> str:
+    return "ed25519:" + ed25519.sign(_ed_message(body), private).hex()
+
+
+def _verify_ed(body: dict[str, Any], signature: str, public: str | bytes) -> bool:
+    if not signature.startswith("ed25519:"):
+        return False
+    return ed25519.verify(_ed_message(body), signature[len("ed25519:"):], public)
+
+
+def _key_meta(key: "SigningKey | str | bytes | None") -> tuple[str, str, str]:
+    """(алгоритм, key_id, публичный ключ) по тому, чем собираются подписывать."""
+    if key is None:
+        return ALG_HMAC, "", ""
+    if isinstance(key, SigningKey):
+        return ALG_ED25519, key.key_id, key.public
+    return ALG_HMAC, key_id(key), ""
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -167,13 +317,24 @@ class Credential:
     work_ref: str = ""
     alg: str = ALG_HMAC
     key_id: str = ""
+    #: Публичный ключ issuer (hex, 32 байта) — то, из-за чего письмо вообще
+    #: переносимо: получатель проверяет подпись, ничего ни у кого не спрашивая.
+    #: Пусто у унаследованных писем с alg="hmac-sha256".
+    public_key: str = ""
     signature: str = ""
 
     # ---------- форма для подписи и переноса ----------
 
     def signed_body(self) -> dict[str, Any]:
-        """Всё, что покрыто подписью: само письмо без самой подписи."""
-        return {
+        """Всё, что покрыто подписью: само письмо без самой подписи.
+
+        Состав тела зависит от `alg`, и это не прихоть: `public_key` появился
+        вместе с Ed25519, и если включать его в тело безусловно, то все
+        свидетельства, подписанные HMAC до этого, перестали бы проверяться —
+        их подпись стоит под телом БЕЗ этого поля. Поэтому поле входит в тело
+        только у схемы, вместе с которой оно появилось.
+        """
+        body = {
             "commitment_id": self.commitment_id,
             "issuer": self.issuer,
             "subject": self.subject,
@@ -188,9 +349,16 @@ class Credential:
             "alg": self.alg,
             "key_id": self.key_id,
         }
+        if self.alg != ALG_HMAC:
+            body["public_key"] = self.public_key
+        return body
 
     def to_dict(self) -> dict[str, Any]:
         d = self.signed_body()
+        # Публичный ключ есть в переносимой форме всегда, когда он есть:
+        # получателю он нужен, даже если тело подписи его не покрывает.
+        if self.public_key:
+            d["public_key"] = self.public_key
         d["signature"] = self.signature
         return d
 
@@ -214,6 +382,7 @@ class Credential:
             work_ref=str(d.get("work_ref", "")),
             alg=str(d.get("alg", ALG_HMAC)),
             key_id=str(d.get("key_id", "")),
+            public_key=str(d.get("public_key", "")),
             signature=str(d.get("signature", "")),
         )
 
@@ -227,11 +396,37 @@ class Credential:
     def parties(self) -> list[str]:
         return sorted(self.anchors)
 
-    def signed_by(self, key: str | bytes) -> bool:
-        """Сходится ли клеймо с этим ключом. Сравнение — compare_digest."""
+    def signed_by(self, key: "SigningKey | str | bytes") -> bool:
+        """Сходится ли клеймо с этим ключом.
+
+        Что считать ключом, решает объявленный в письме `alg`, а не догадка по
+        длине: у `ed25519` это ПУБЛИЧНЫЙ ключ issuer (секрет для проверки не
+        нужен — в этом весь смысл), у `hmac-sha256` — общий секрет. Сравнение
+        HMAC идёт через `compare_digest`, чтобы по времени сравнения нельзя
+        было подбирать подпись побайтово.
+        """
         if not self.signature:
             return False
-        return hmac.compare_digest(self.signature, _sign(self.signed_body(), key))
+        if self.alg == ALG_ED25519:
+            public = key.public if isinstance(key, SigningKey) else key
+            return _verify_ed(self.signed_body(), self.signature, public)
+        if self.alg == ALG_HMAC:
+            if isinstance(key, SigningKey):
+                return False  # ed25519-пара к симметричной подписи не подходит
+            return hmac.compare_digest(self.signature, _sign(self.signed_body(), key))
+        return False
+
+    def self_consistent(self) -> bool:
+        """Сходится ли подпись с ключом, названным В САМОМ письме.
+
+        Отдельным методом — чтобы в коде было видно, что это НЕ проверка
+        личности issuer: ключ взят оттуда же, откуда текст. Проверяется только
+        одно — что после подписания письмо не правили. Для `hmac-sha256`
+        бессмысленно и возвращает False: симметричный секрет в письме не ездит.
+        """
+        if self.alg != ALG_ED25519 or not self.public_key:
+            return False
+        return self.signed_by(self.public_key)
 
     def __str__(self) -> str:
         return (f"{self.subject} ← {self.issuer}: {self.work} "
@@ -384,7 +579,7 @@ def issue(
     rating: int,
     note: str = "",
     *,
-    key: str | bytes | None = None,
+    key: "SigningKey | str | bytes | None" = None,
     work: str = "",
     work_ref: str = "",
     service: str = "",
@@ -402,7 +597,10 @@ def issue(
     `commitment_id`. Для карты времени этого достаточно, для письма, которое
     предъявляют третьей стороне, — нет.
 
-    `key` — секрет issuer. Без него письмо выдаётся неподписанным: это не
+    `key` — клеймо issuer. `SigningKey` (пара Ed25519) даёт переносимое письмо:
+    публичный ключ уезжает в нём, и проверить подпись сможет кто угодно.
+    Строка или байты означают унаследованный HMAC и оставлены для совместимости
+    с уже выданными письмами. Без ключа письмо выдаётся неподписанным: это не
     ошибка, а честное состояние («работа доказуема, клейма нет»), и портфолио
     такое письмо отличит от подписанного.
     """
@@ -428,6 +626,7 @@ def issue(
             raise CredentialError(
                 f"обязательство {commitment.id} не записано в журнал стороны '{who}'")
 
+    alg, kid, public = _key_meta(key)
     draft = Credential(
         commitment_id=commitment.id,
         issuer=issuer,
@@ -440,7 +639,9 @@ def issue(
         service=service,
         verb=verb,
         work_ref=work_ref,
-        key_id=key_id(key) if key is not None else "",
+        alg=alg,
+        key_id=kid,
+        public_key=public,
     )
 
     # Та же самая проверка, которой потом будет пользоваться проверяющий.
@@ -456,17 +657,26 @@ def issue(
     return sign(draft, key)
 
 
-def sign(credential: Credential, key: str | bytes) -> Credential:
+def sign(credential: Credential, key: "SigningKey | str | bytes") -> Credential:
     """Поставить клеймо на письмо (или переставить его другим ключом).
 
     Отдельной функцией — потому что мастер может подписать письмо позже, чем
     составил, и потому что ПОДДЕЛКА выглядит ровно так же: кто угодно ставит
-    своё клеймо на переписанный текст. Именно поэтому решающей проверкой здесь
-    остаётся не подпись, а привязка к двум цепям: подделыватель перепишет
-    `issuer` и подпишет своим ключом, но `parties` в чужих журналах не
-    перепишет.
+    своё клеймо на переписанный текст. Асимметричная подпись этого не отменяет:
+    подделыватель заводит свою пару ключей, вписывает себя issuer-ом и
+    подписывает — подпись сойдётся с его же публичным ключом. Отвергает такое
+    письмо не подпись, а две вещи: привязка к двум чужим цепям (`parties` в
+    них не перепишешь) и несовпадение ключа с тем, который issuer опубликовал
+    в паспорте.
+
+    Алгоритм выбирается типом ключа: `SigningKey` → Ed25519, строка или
+    байты → унаследованный HMAC. Объявленный `alg` письма переписывается под
+    ключ, иначе письмо утверждало бы одно, а было подписано другим.
     """
-    stamped = replace(credential, key_id=key_id(key))
+    alg, kid, public = _key_meta(key)
+    stamped = replace(credential, alg=alg, key_id=kid, public_key=public)
+    if isinstance(key, SigningKey):
+        return replace(stamped, signature=_sign_ed(stamped.signed_body(), key.private))
     return replace(stamped, signature=_sign(stamped.signed_body(), key))
 
 
@@ -475,11 +685,180 @@ def sign(credential: Credential, key: str | bytes) -> Credential:
 # ────────────────────────────────────────────────────────────────────────────
 
 
+@dataclass(frozen=True)
+class Verdict:
+    """Итог проверки: не только «годно», но и НА КАКОМ ОСНОВАНИИ.
+
+    Нужен потому, что «проверено» бывает четырёх разных сортов (см. заголовок
+    модуля), и вызывающий, который видит только `bool`, неизбежно принимает
+    слабейший сорт за сильнейший. `level` называет сорт прямо, а `work_proven`
+    отделяет доказанность САМОЙ РАБОТЫ от состояния подписи: работа может быть
+    доказана цепями, когда подпись проверить нечем, — и наоборот.
+    """
+
+    ok: bool
+    reasons: list[str]
+    work_proven: bool
+    level: str
+    alg: str
+    key_id: str
+    public_key: str
+
+    @property
+    def public(self) -> bool:
+        """Проверено публично: без секретов и без веры самому письму."""
+        return self.level == LEVEL_PUBLIC
+
+    def explain(self) -> str:
+        head = "годно" if self.ok else "не годно"
+        return (f"{head}: работа {'доказана' if self.work_proven else 'не доказана'}, "
+                f"подпись — {LEVELS.get(self.level, self.level)}"
+                + ("; " + "; ".join(self.reasons) if self.reasons else ""))
+
+
+def _check_signature(
+    credential: Credential,
+    key: "SigningKey | str | bytes | None",
+    public_key: str | bytes | None,
+) -> tuple[str, list[str], list[str]]:
+    """(уровень, жёсткие причины, мягкие причины).
+
+    Разделение причин на две группы повторяет различие, которое есть и в жизни:
+
+      жёсткие — что-то НЕ СОШЛОСЬ (подпись не та, ключ не тот, алгоритм
+                неизвестен). Это приговор независимо от того, требовали ли
+                подпись: предъявили клеймо, и оно оказалось чужим.
+      мягкие  — проверить НЕ ПОЛУЧИЛОСЬ (подписи нет, ключа нет, ключ взят из
+                самого письма). Это не обвинение, а состояние, и учитывается
+                оно только при `require_signature=True`.
+    """
+    if not credential.signature:
+        return LEVEL_NONE, [], ["свидетельство не подписано: клейма мастера нет"]
+
+    if credential.alg == ALG_ED25519:
+        presented = public_key if public_key is not None else key
+        if isinstance(presented, SigningKey):
+            presented = presented.public
+        embedded = credential.public_key
+
+        if presented is None and not embedded:
+            return LEVEL_NONE, [], [
+                "в свидетельстве не назван публичный ключ issuer, и проверяющий "
+                "своего не предъявил — проверять подпись нечем"]
+
+        # Оба ключа приводятся к одной форме в try: на вход проверки по
+        # определению попадают данные от того, кто мог их подделать, и
+        # исключение здесь означало бы «проверка упала» вместо «письмо негодно».
+        material: str | bytes = presented if presented is not None else embedded
+        try:
+            normalized = ed25519.public_hex(material)
+        except ed25519.Ed25519Error as e:
+            return LEVEL_NONE, [f"предъявленный публичный ключ не читается: {e}"], []
+
+        if presented is not None and embedded:
+            try:
+                embedded_hex = ed25519.public_hex(embedded)
+            except ed25519.Ed25519Error as e:
+                return LEVEL_NONE, [
+                    f"публичный ключ в самом свидетельстве не читается: {e}"], []
+            if normalized != embedded_hex:
+                return LEVEL_NONE, [
+                    "предъявленный публичный ключ issuer не тот, которым подписано "
+                    "свидетельство: письмо подписал не тот, кем оно подписано по "
+                    "паспорту issuer"], []
+        if not credential.signed_by(normalized):
+            return LEVEL_NONE, [
+                "подпись не сходится: содержимое изменено либо ключ чужой"], []
+        if credential.key_id and credential.key_id != public_key_id(normalized):
+            return LEVEL_NONE, ["отпечаток ключа не совпадает с объявленным key_id"], []
+
+        if presented is None:
+            # Подпись цела, но ключ взят оттуда же, откуда текст. Называем это
+            # вслух: иначе любой, кто видел честное письмо, выпишет себе такое
+            # же от имени того же issuer своей парой ключей.
+            return LEVEL_DECLARED, [], [
+                "публичный ключ взят из самого свидетельства: проверена целостность "
+                "текста, но не личность issuer — для публичной проверки нужен ключ "
+                "issuer из независимого источника (паспорт стороны)"]
+        return LEVEL_PUBLIC, [], []
+
+    if credential.alg == ALG_HMAC:
+        if credential.public_key:
+            # Поле, которое ничем не покрыто и ничего не доказывает, обязано
+            # называться ошибкой: иначе письмо выглядит «с публичным ключом»,
+            # а проверить его без секрета всё равно нельзя.
+            return LEVEL_NONE, [
+                "свидетельство объявлено симметричным (hmac-sha256), но несёт "
+                "публичный ключ: это поле подписью не покрыто и ничего не "
+                "подтверждает"], []
+        if public_key is not None:
+            return LEVEL_NONE, [
+                f"публичным ключом проверяется только {ALG_ED25519}, а это "
+                f"свидетельство подписано {ALG_HMAC} — симметричной схемой"], []
+        if key is None:
+            return LEVEL_NONE, [], [
+                "подпись не проверена: HMAC-SHA256 — симметричная схема, "
+                "для проверки нужен тот же секрет, что у issuer "
+                "(работа при этом доказана цепями независимо от подписи)"]
+        if isinstance(key, SigningKey):
+            return LEVEL_NONE, [
+                "предъявлена пара ключей Ed25519, а свидетельство подписано "
+                "симметричным HMAC — такой ключ к этой подписи не подходит"], []
+        if not credential.signed_by(key):
+            return LEVEL_NONE, [
+                "подпись не сходится: содержимое изменено либо ключ чужой"], []
+        if credential.key_id and credential.key_id != key_id(key):
+            return LEVEL_NONE, ["отпечаток ключа не совпадает с объявленным key_id"], []
+        return LEVEL_SECRET, [], []
+
+    return LEVEL_NONE, [f"неизвестный алгоритм подписи: {credential.alg!r}"], []
+
+
+def examine(
+    credential: Credential,
+    ledgers: Mapping[str, Ledger],
+    *,
+    key: "SigningKey | str | bytes | None" = None,
+    public_key: str | bytes | None = None,
+    require_signature: bool = True,
+    require_ref: bool = True,
+) -> Verdict:
+    """Полная проверка с названным уровнем доверия к подписи.
+
+    `public_key` — публичный ключ issuer, который проверяющий знает НЕ ИЗ
+    ПИСЬМА (из паспорта стороны). Только он даёт уровень `public`: ни секрета,
+    ни доверия к самому предъявленному документу при этом не требуется, и
+    именно в этом состоял смысл перехода на асимметричную подпись.
+
+    `key` — то же место для унаследованного симметричного секрета; для письма
+    с `alg="ed25519"` он читается как публичный ключ, чтобы один словарь
+    «что проверяющий знает про каждого issuer» годился для обеих схем.
+    """
+    work_ok, reasons = work_proven(credential, ledgers, require_ref=require_ref)
+    reasons = list(reasons)
+
+    level, hard, soft = _check_signature(credential, key, public_key)
+    reasons.extend(hard)
+    if require_signature:
+        reasons.extend(soft)
+
+    return Verdict(
+        ok=not reasons,
+        reasons=reasons,
+        work_proven=work_ok,
+        level=level,
+        alg=credential.alg,
+        key_id=credential.key_id,
+        public_key=credential.public_key,
+    )
+
+
 def verify(
     credential: Credential,
     ledgers: Mapping[str, Ledger],
     *,
-    key: str | bytes | None = None,
+    key: "SigningKey | str | bytes | None" = None,
+    public_key: str | bytes | None = None,
     require_signature: bool = True,
     require_ref: bool = True,
 ) -> tuple[bool, list[str]]:
@@ -489,39 +868,25 @@ def verify(
     намеренно не коды: письмо предъявляют человеку, и отказ «цепь заказчика
     нарушена» он может проверить сам, а код ошибки — нет.
 
-    Три случая разделены, потому что означают разное:
+    Четыре случая разделены, потому что означают разное:
 
       цепь подделана        → доказательства нет ни у кого (ошибка хранения
                               или попытка переписать историю);
       обязательства нет     → письмо выдано под работу, которой не было;
-      issuer подменён       → работа была, но хвалит её не её заказчик.
+      issuer подменён       → работа была, но хвалит её не её заказчик;
+      ключ не тот           → письмо подписано не тем, кем подписано по
+                              паспорту issuer.
 
-    Про `key`: это HMAC (см. оговорку в начале модуля). Без ключа подпись не
-    проверяется, и при `require_signature=True` письмо считается НЕ полностью
-    проверенным — но причина так и называется, и вместе с ней сообщается, что
-    сама работа при этом доказана цепями.
+    Про ключи: для `alg="ed25519"` достаточно ПУБЛИЧНОГО ключа issuer, никакого
+    секрета не требуется — в этом весь смысл. Если ключ не предъявлен вовсе,
+    подпись сверяется с ключом, названным в самом письме, и такой результат
+    честно считается НЕ полной проверкой (уровень `declared`). Для
+    унаследованного `alg="hmac-sha256"` нужен тот же секрет, что у issuer.
+    Уровень проверки возвращает `examine()`; здесь он сворачивается в `bool`.
     """
-    ok, reasons = work_proven(credential, ledgers, require_ref=require_ref)
-    reasons = list(reasons)
-
-    if not credential.signature:
-        if require_signature:
-            reasons.append("свидетельство не подписано: клейма мастера нет")
-    elif key is None:
-        if require_signature:
-            reasons.append(
-                "подпись не проверена: HMAC-SHA256 — симметричная схема, "
-                "для проверки нужен тот же секрет, что у issuer "
-                "(работа при этом доказана цепями независимо от подписи)")
-    else:
-        if credential.alg != ALG_HMAC:
-            reasons.append(f"неизвестный алгоритм подписи: {credential.alg!r}")
-        elif not credential.signed_by(key):
-            reasons.append("подпись не сходится: содержимое изменено либо ключ чужой")
-        elif credential.key_id and credential.key_id != key_id(key):
-            reasons.append("отпечаток ключа не совпадает с объявленным key_id")
-
-    return (not reasons), reasons
+    v = examine(credential, ledgers, key=key, public_key=public_key,
+                require_signature=require_signature, require_ref=require_ref)
+    return v.ok, v.reasons
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -560,6 +925,39 @@ class Portfolio:
 
     # ---------- главное: что здесь проверяемо ----------
 
+    def examined(
+        self,
+        ledgers: Mapping[str, Ledger],
+        keys: Mapping[str, str | bytes] | None = None,
+        *,
+        require_signature: bool = True,
+    ) -> list[tuple[Credential, Verdict]]:
+        """Каждое письмо со своим вердиктом — основа для всех остальных методов.
+
+        Одно место, где папка проверяется, и три разных взгляда на результат
+        (`verifiable`, `publicly_verifiable`, `summary`). Иначе «проверяемо» в
+        сводке и «проверяемо» в разделении папки разъехались бы при первой же
+        правке — а это ровно тот сорт расхождения, из-за которого потом
+        верят числу, которое никто не считал.
+
+        `keys` — то, что проверяющий знает про каждого issuer: публичный ключ
+        для писем с `alg="ed25519"`, общий секрет для унаследованных `hmac`.
+        Какое из двух — решает объявленный в письме `alg`, а не угадывание.
+        """
+        known = dict(keys or {})
+        out: list[tuple[Credential, Verdict]] = []
+        for cred in self.credentials:
+            if cred.subject != self.subject:
+                out.append((cred, Verdict(
+                    ok=False,
+                    reasons=[f"письмо адресовано не '{self.subject}', а '{cred.subject}'"],
+                    work_proven=False, level=LEVEL_NONE, alg=cred.alg,
+                    key_id=cred.key_id, public_key=cred.public_key)))
+                continue
+            out.append((cred, examine(cred, ledgers, key=known.get(cred.issuer),
+                                      require_signature=require_signature)))
+        return out
+
     def verifiable(
         self,
         ledgers: Mapping[str, Ledger],
@@ -569,25 +967,46 @@ class Portfolio:
     ) -> tuple[list[Credential], list[tuple[Credential, list[str]]]]:
         """Разделить папку: (проверяемые, [(непроверяемое, причины)]).
 
-        `keys` — секреты issuer-ов, какие у проверяющего есть (issuer → ключ).
+        `keys` — ключи issuer-ов, какие у проверяющего есть (issuer → ключ).
         Чьего ключа нет, то письмо при `require_signature=True` попадёт в
-        непроверяемые с причиной про симметричную схему. Это не придирка:
-        именно так и выглядит предел HMAC, и прятать его в «годно» нельзя.
+        непроверяемые — но с РАЗНОЙ причиной: у `hmac` это предел симметричной
+        схемы (нужен секрет), у `ed25519` — то, что ключ пришлось взять из
+        самого письма. Прятать ни то, ни другое в «годно» нельзя.
         """
-        keys = dict(keys or {})
         good: list[Credential] = []
         bad: list[tuple[Credential, list[str]]] = []
-        for cred in self.credentials:
-            if cred.subject != self.subject:
-                bad.append((cred, [f"письмо адресовано не '{self.subject}', "
-                                   f"а '{cred.subject}'"]))
-                continue
-            ok, reasons = verify(cred, ledgers, key=keys.get(cred.issuer),
-                                 require_signature=require_signature)
-            if ok:
+        for cred, v in self.examined(ledgers, keys, require_signature=require_signature):
+            (good.append(cred) if v.ok else bad.append((cred, v.reasons)))
+        return good, bad
+
+    def publicly_verifiable(
+        self,
+        ledgers: Mapping[str, Ledger],
+        public_keys: Mapping[str, str | bytes] | None = None,
+    ) -> tuple[list[Credential], list[tuple[Credential, list[str]]]]:
+        """Что в папке проверяемо ПУБЛИЧНО — то есть вообще без секретов.
+
+        Это и есть ответ на вопрос «что из моей репутации я могу унести с
+        собой»: письмо попадает сюда только при `alg="ed25519"` И уровне
+        `public`, то есть когда подпись сошлась с ключом issuer, известным
+        проверяющему независимо от самого письма (из паспорта).
+
+        Унаследованные `hmac`-письма сюда не попадают никогда — даже если
+        секрет у проверяющего есть и подпись сошлась. Проверка, для которой
+        нужен секрет issuer, непереносима по построению, и считать её публичной
+        значило бы снова выдавать желаемое за проверенное.
+        """
+        good: list[Credential] = []
+        bad: list[tuple[Credential, list[str]]] = []
+        for cred, v in self.examined(ledgers, public_keys):
+            if v.ok and v.public:
                 good.append(cred)
-            else:
-                bad.append((cred, reasons))
+                continue
+            reasons = list(v.reasons)
+            if v.ok and not v.public:
+                reasons.append(
+                    f"проверено, но не публично: {LEVELS.get(v.level, v.level)}")
+            bad.append((cred, reasons))
         return good, bad
 
     # ---------- сводка ----------
@@ -609,13 +1028,25 @@ class Portfolio:
         Работы считаются по `commitment_id`, а не по письмам: два письма об
         одной работе — одна работа. Иначе репутацию можно было бы надуть,
         попросив заказчика написать ещё одно письмо о том же.
+
+        Отдельно считается `publicly_verifiable` — сколько из учтённых писем
+        проверено БЕЗ СЕКРЕТОВ (уровень `public`). Это и есть «сколько
+        репутации переносимо»: остальное проверяется только там, где есть
+        секрет issuer, то есть не переносится вместе с исполнителем.
         """
+        levels: dict[str, int] = {}
         if ledgers is None:
             basis, counted, rejected = "заявленное", list(self.credentials), []
         else:
             basis = "проверенное"
-            counted, rejected = self.verifiable(ledgers, keys,
-                                                require_signature=require_signature)
+            counted, rejected = [], []
+            for c, v in self.examined(ledgers, keys,
+                                      require_signature=require_signature):
+                if v.ok:
+                    counted.append(c)
+                    levels[v.level] = levels.get(v.level, 0) + 1
+                else:
+                    rejected.append((c, v.reasons))
 
         works = sorted({c.commitment_id for c in counted})
         ratings_by_work: dict[str, int] = {}
@@ -648,6 +1079,11 @@ class Portfolio:
             },
             "services": sorted({c.service for c in counted if c.service}),
             "signed": sum(1 for c in counted if c.signature),
+            "algorithms": sorted({c.alg for c in counted if c.signature}),
+            "levels": {lv: levels[lv] for lv in sorted(levels)},
+            "publicly_verifiable": levels.get(LEVEL_PUBLIC, 0),
+            "portable": bool(counted) and levels.get(LEVEL_PUBLIC, 0) == len(counted),
+            "key_ids": sorted({c.key_id for c in counted if c.key_id}),
             "rejected": len(rejected),
             "rejected_reasons": [
                 {"commitment_id": c.commitment_id, "issuer": c.issuer, "reasons": rs}
@@ -655,6 +1091,10 @@ class Portfolio:
             ],
             "note": "репутация — список проверяемых работ, а не число на профиле: "
                     "каждая строка указывает на обязательство в двух независимых цепях",
+            "levels_note": "publicly_verifiable — сколько писем проверено без всяких "
+                           "секретов (Ed25519, ключ issuer из паспорта); остальное "
+                           "проверяется только там, где есть секрет issuer, и вместе "
+                           "с исполнителем не переносится",
         }
 
     def to_json(self) -> str:

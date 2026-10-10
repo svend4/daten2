@@ -49,15 +49,15 @@
     {
       "id": "booking.create",
       "title": "Подтвердить запись",
-      "description": "Необратимое обязательство. Требует действующего удержания и согласия обеих сторон.",
+      "description": "Необратимое обязательство. Требует действующего удержания и согласия обеих сторон. Поле when (§6.1) — объявленное время обязательства {starts_at, duration_min, place}: клиент МОЖЕТ передать его, чтобы оно легло в запись commitment обеих сторон, а сервис МОЖЕТ вернуть его в ответе, потому что день и час слота он уже знает. Угадывать время по тексту заметки не обязан ни один из них.",
       "effect": "commit",
       "reversible": false,
       "cost": { "money": "variable", "currency": "EUR", "time_s": 0.3 },
       "consent": "two_party",
       "idempotency": "header:Idempotency-Key",
       "binding": { "protocol": "http", "method": "POST", "path": "/api/bookings" },
-      "input": { "hold_id": "string", "name": "string", "note": "string?", "max_money": "number?" },
-      "output": { "booking_number": "string", "total": "number", "currency": "string" }
+      "input": { "hold_id": "string", "name": "string", "note": "string?", "max_money": "number?", "when": "object?" },
+      "output": { "booking_number": "string", "total": "number", "currency": "string", "when": "object?" }
     },
     {
       "id": "booking.get",

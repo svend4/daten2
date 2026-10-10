@@ -13,12 +13,25 @@
 (Образец этой ошибки в экосистеме известен: смоук plugin-marketplace имеет
 14/14 зелёных и при этом сервис отвергает все настоящие бэкенды.)
 
+ЧТО ДОБАВИЛОСЬ ВМЕСТЕ С АСИММЕТРИЧНОЙ ПОДПИСЬЮ
+----------------------------------------------
+Теперь свидетельство подписывается Ed25519, и главное новое утверждение —
+«проверить может КТО УГОДНО, не имея никаких секретов». Проверяется оно так:
+письмо о настоящей работе выдаётся с парой ключей заказчика, после чего
+проверяющему отдают только журналы сторон и публичный ключ из паспорта — ни
+приватного ключа, ни доступа к сервису. Сама подпись сверена с двумя внешними
+эталонами в `act/tests/test_ed25519.py`; здесь проверяется не арифметика, а то,
+что протокол ею пользуется и что уровни доверия не путаются между собой.
+
 Запуск:  python3 -m act.tests.test_credential
 """
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
+import socket
 import subprocess
 import sys
 import tempfile
@@ -36,18 +49,26 @@ from act.npp_act import (  # noqa: E402
     Agent, Budget, Commitment, Executor, Governor, Ledger, Registry,
 )
 from act.npp_act.credential import (  # noqa: E402
-    ALG_HMAC, RATING_MAX, Credential, CredentialError, Portfolio,
-    issue, key_id, sign, verify, work_proven,
+    ALG_ED25519, ALG_HMAC, LEVEL_DECLARED, LEVEL_NONE, LEVEL_PUBLIC, LEVEL_SECRET,
+    RATING_MAX, Credential, CredentialError, Portfolio, SigningKey,
+    examine, issue, key_id, new_issuer_key, public_key_id, sign, verify, work_proven,
 )
 
 SERVICE = "freelance-guild"
 BASE = ""  # подставляется в main()
 
-#: Секреты «клейма мастера». В тесте они просто строки: асимметричной подписи
-#: в stdlib нет, и модуль об этом ограничении говорит прямо (см. его docstring).
+#: Унаследованные симметричные секреты. Оставлены в наборе не для полноты, а
+#: потому что совместимость — отдельное требование: ранее выданные письма с
+#: alg="hmac-sha256" обязаны проверяться и после перехода на Ed25519.
 KOLYA_KEY = "secret-kolya-0001"
 PETRA_KEY = "secret-petra-0002"
 STRANGER_KEY = "secret-stranger-9999"
+
+#: Пары ключей Ed25519. Seed фиксирован, чтобы прогон был воспроизводим: это
+#: тест, а не выдача настоящих ключей, и секретность здесь ничего не защищает.
+KOLYA_PAIR = new_issuer_key(bytes([11]) * 32)
+PETRA_PAIR = new_issuer_key(bytes([22]) * 32)
+STRANGER_PAIR = new_issuer_key(bytes([99]) * 32)
 
 PASSED = 0
 FAILED = 0
@@ -63,14 +84,43 @@ def check(label: str, cond: bool, detail: str = "") -> None:
         print(f"  ✗ {label}" + (f" — {detail}" if detail else ""))
 
 
+def answers(url: str) -> bool:
+    try:
+        with urllib.request.urlopen(url, timeout=0.5):
+            return True
+    except Exception:
+        return False
+
+
 def wait_up(url: str, attempts: int = 50) -> bool:
     for _ in range(attempts):
-        try:
-            with urllib.request.urlopen(url, timeout=1):
-                return True
-        except Exception:
-            time.sleep(0.1)
+        if answers(url):
+            return True
+        time.sleep(0.1)
     return False
+
+
+def pick_port() -> int:
+    """Порт, который и молчит по HTTP, и действительно свободен для bind.
+
+    Фиксированный номер здесь уже стоил одного молчаливого ложного прогона в
+    соседнем наборе: тест мерил ЧУЖОЙ процесс, случайно занявший порт, и
+    отчитывался зелёным. Двух проверок мало по отдельности — молчащий порт
+    может быть занят процессом, который не отвечает на HTTP, а успешный bind
+    ничего не говорит о том, кто ответит на запрос. Нужны обе.
+    """
+    port = 8241
+    while port < 8641:
+        candidate, port = port, port + 1
+        if answers(f"http://127.0.0.1:{candidate}/api/health"):
+            continue
+        with socket.socket() as probe:
+            try:
+                probe.bind(("127.0.0.1", candidate))
+            except OSError:
+                continue
+        return candidate
+    raise RuntimeError("свободных портов для цеха не нашлось")
 
 
 def week_of(offset_weeks: int) -> str:
@@ -585,29 +635,401 @@ def test_portfolio(env: dict, creds: dict) -> None:
 
 
 # ────────────────────────────────────────────────────────────────────────────
+# 7. Асимметричная подпись: письмо проверяет кто угодно, без секретов
+# ────────────────────────────────────────────────────────────────────────────
+
+#: Проверка «третьей стороной» выполняется ОТДЕЛЬНЫМ ПРОЦЕССОМ, которому
+#: передают только путь к журналам, текст письма и публичный ключ из паспорта.
+#: Так проверяемое утверждение становится буквальным: никакого секрета, никакой
+#: общей памяти, никакого доступа к сервису — и всё равно «годно».
+THIRD_PARTY = r'''
+import json, sys
+root, raw, public = sys.argv[1], sys.argv[2], sys.argv[3]
+sys.path.insert(0, root)
+from act.npp_act.ledger import Ledger
+from act.npp_act.credential import Credential, examine
+ledgers = {}
+for pair in sys.argv[4:]:
+    owner, path = pair.split("=", 1)
+    ledgers[owner] = Ledger(path, owner=owner)
+v = examine(Credential.from_json(raw), ledgers,
+            public_key=(public or None))
+print(json.dumps({"ok": v.ok, "level": v.level, "work": v.work_proven,
+                  "reasons": v.reasons}, ensure_ascii=False))
+'''
+
+
+def third_party(cred: Credential, ledgers: dict, public: str) -> dict:
+    args = [sys.executable, "-I", "-c", THIRD_PARTY, str(ROOT), cred.to_json(), public]
+    args += [f"{owner}={led.path}" for owner, led in sorted(ledgers.items())]
+    run = subprocess.run(args, capture_output=True, text=True, timeout=120)
+    if run.returncode != 0:
+        return {"ok": False, "level": "—", "work": False,
+                "reasons": [f"проверяющий процесс упал: {run.stderr.strip()[-300:]}"]}
+    return json.loads(run.stdout)
+
+
+def canonical(obj) -> str:
+    """Каноническая форма JSON — вписана в тест, а не взята из модуля.
+
+    Нарочно: от неё зависит ПОДПИСЬ, и если тест будет спрашивать форму у
+    того же модуля, который подписывает, то согласованная ошибка пройдёт
+    незамеченной. Здесь форма зафиксирована как внешнее требование к формату.
+    """
+    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def legacy_hmac_letter(cred: Credential, secret: str) -> str:
+    """Собрать письмо СТАРОГО формата вручную и вернуть его JSON.
+
+    Это проверка совместимости «снизу»: тест не спрашивает у новой реализации,
+    как выглядел прежний формат, а воспроизводит его по первоисточнику —
+    тринадцать полей тела, та же метка домена, тот же HMAC-SHA256. Если новая
+    версия незаметно изменит состав подписываемого тела, все ранее выданные
+    письма станут недействительными, и узнать об этом нужно здесь, а не от
+    исполнителя, которому откажут в его собственной репутации.
+    """
+    sig_label = b"npp-act/credential/signature/v1\x00"
+    kid_label = b"npp-act/credential/key-id/v1"
+    key = secret.encode("utf-8")
+    kid = "kid_" + hmac.new(key, kid_label, hashlib.sha256).hexdigest()[:16]
+    body = {
+        "commitment_id": cred.commitment_id, "issuer": cred.issuer,
+        "subject": cred.subject, "work": cred.work, "rating": cred.rating,
+        "note": cred.note, "issued_at": cred.issued_at,
+        "anchors": dict(cred.anchors), "service": cred.service,
+        "verb": cred.verb, "work_ref": cred.work_ref,
+        "alg": "hmac-sha256", "key_id": kid,
+    }
+    signature = "hs256:" + hmac.new(
+        key, sig_label + canonical(body).encode("utf-8"), hashlib.sha256).hexdigest()
+    return canonical({**body, "signature": signature})
+
+
+def test_asymmetric(env: dict) -> dict:
+    print("\nАсимметричная подпись: публичная проверка без всяких секретов:")
+    ledgers, w1 = env["ledgers"], env["w1"]
+    cmt1 = w1["commitment"]
+
+    cred = issue(cmt1, ledgers, "person:kolya", "person:marina", 5,
+                 "сдано с первого раза", key=KOLYA_PAIR,
+                 work_ref=w1["work_ref"], service=SERVICE, verb="contract.sign")
+
+    check("алгоритм в письме — ed25519", cred.alg == ALG_ED25519, cred.alg)
+    check("клеймо поставлено Ed25519", cred.signature.startswith("ed25519:"),
+          cred.signature[:20])
+    check("подпись — 64 байта",
+          len(bytes.fromhex(cred.signature.split(":", 1)[1])) == 64)
+    check("публичный ключ issuer уехал в письме",
+          cred.public_key == KOLYA_PAIR.public, cred.public_key)
+    check("отпечаток ключа считается из публичного ключа — его может посчитать любой",
+          cred.key_id == public_key_id(KOLYA_PAIR.public) == KOLYA_PAIR.key_id, cred.key_id)
+    check("ПРИВАТНОГО ключа в письме нет",
+          KOLYA_PAIR.private not in cred.to_json())
+    check("публичный ключ покрыт подписью (входит в подписываемое тело)",
+          "public_key" in cred.signed_body())
+
+    # ── главное утверждение этапа ──────────────────────────────────────────
+    ok, reasons = verify(cred, ledgers, public_key=KOLYA_PAIR.public)
+    check("письмо проверено ОДНИМ ПУБЛИЧНЫМ КЛЮЧОМ, без секрета issuer",
+          ok, "; ".join(reasons))
+    v = examine(cred, ledgers, public_key=KOLYA_PAIR.public)
+    check("уровень проверки назван публичным", v.level == LEVEL_PUBLIC and v.public, v.level)
+    check("в вердикте отдельно сказано, что работа доказана цепями", v.work_proven)
+    check("вердикт объясняется человеку одной строкой",
+          "годно" in v.explain() and "публично" in v.explain(), v.explain())
+
+    # Тот же ключ работает в любой кодировке: паспорт может хранить base64.
+    import base64
+    b64 = base64.b64encode(bytes.fromhex(KOLYA_PAIR.public)).decode()
+    ok, _ = verify(cred, ledgers, public_key=b64)
+    check("публичный ключ принимается и в base64 (паспорт хранит как хочет)", ok)
+
+    # ── проверка посторонним процессом: ни секретов, ни общей памяти ───────
+    out = third_party(cred, ledgers, KOLYA_PAIR.public)
+    check("посторонний процесс проверил письмо по журналам и публичному ключу",
+          out["ok"] and out["level"] == LEVEL_PUBLIC, str(out))
+    check("ему для этого хватило паспортного ключа и двух журналов", out["work"])
+
+    # ── без ключа: целостность проверена, личность — нет ──────────────────
+    v = examine(cred, ledgers)
+    check("без предъявленного ключа уровень честно понижен до declared",
+          v.level == LEVEL_DECLARED, v.level)
+    check("и такое письмо НЕ считается проверенным", not v.ok)
+    check("причина названа прямо: ключ взят из самого свидетельства",
+          has(v.reasons, "взят из самого свидетельства"), "; ".join(v.reasons))
+    check("при этом подпись с ключом из письма действительно сходится",
+          cred.self_consistent())
+
+    # ── подделка «со своей парой ключей» — то, чего не ловит сама подпись ──
+    # Посторонний видел честное письмо (а значит, и хэши-привязки), завёл свою
+    # пару ключей, вписал себя issuer-ом настоящей работы и подписал. Его
+    # подпись СХОДИТСЯ с его же публичным ключом — и именно поэтому уровень
+    # declared нельзя считать проверкой.
+    forged = sign(replace(cred, issuer="person:stranger", rating=5,
+                          note="блестяще, рекомендую"), STRANGER_PAIR)
+    check("подделыватель со своей парой ключей получает внутренне согласное письмо",
+          forged.self_consistent())
+    v = examine(forged, ledgers)
+    check("но цепи отвергают его и без всякого ключа", not v.ok)
+    check("причина — он не сторона обязательства",
+          has(v.reasons, "не является стороной обязательства")
+          or has(v.reasons, "нет хэша-привязки"), "; ".join(v.reasons))
+
+    # Тот же трюк, но issuer оставлен настоящий: цепи такое письмо пропускают,
+    # и отвергает его ровно паспортный ключ — то есть асимметричная подпись.
+    impostor = sign(replace(cred, rating=5, note="я сам себе заказчик"), STRANGER_PAIR)
+    ok, reasons = work_proven(impostor, ledgers)
+    check("письмо с подменённым только текстом цепи пропускают", ok, "; ".join(reasons))
+    v = examine(impostor, ledgers)
+    check("без паспортного ключа подделка выглядит «подписанной»",
+          v.level == LEVEL_DECLARED, v.level)
+    v = examine(impostor, ledgers, public_key=KOLYA_PAIR.public)
+    check("с паспортным ключом issuer подделка отвергнута", not v.ok)
+    check("причина — подписано не тем ключом, который issuer опубликовал",
+          has(v.reasons, "не тот, которым подписано"), "; ".join(v.reasons))
+    check("уровень при этом не «публично проверено»", v.level == LEVEL_NONE, v.level)
+
+    # ── правка текста ломает подпись ──────────────────────────────────────
+    for changed, what in ((replace(cred, rating=1), "оценки"),
+                          (replace(cred, note="переписано"), "отзыва"),
+                          (replace(cred, issued_at="2000-01-01T00:00:00Z"), "даты"),
+                          (replace(cred, public_key=PETRA_PAIR.public), "ключа в письме")):
+        ok, reasons = verify(changed, ledgers, public_key=KOLYA_PAIR.public)
+        check(f"правка {what} ломает проверку", not ok, "; ".join(reasons))
+
+    ok, reasons = verify(cred, ledgers, public_key=PETRA_PAIR.public)
+    check("чужой публичный ключ письмо не подтверждает",
+          not ok and has(reasons, "не тот, которым подписано"), "; ".join(reasons))
+    ok, reasons = verify(cred, ledgers, public_key="это не ключ")
+    check("мусор вместо ключа отвергнут с внятной причиной",
+          not ok and has(reasons, "не читается"), "; ".join(reasons))
+
+    # Испорченный ключ В САМОМ письме — данные от того, кто мог их подделать.
+    # Проверка обязана ответить «негодно», а не упасть с исключением.
+    ok, reasons = verify(replace(cred, public_key="мусор"), ledgers,
+                         public_key=KOLYA_PAIR.public)
+    check("нечитаемый публичный ключ внутри письма отвергнут без исключения",
+          not ok and has(reasons, "в самом свидетельстве не читается"),
+          "; ".join(reasons))
+    ok, reasons = verify(replace(cred, public_key="мусор"), ledgers)
+    check("то же письмо без предъявленного ключа тоже отвергнуто",
+          not ok and has(reasons, "не читается"), "; ".join(reasons))
+
+    # ── паспорт: откуда проверяющий берёт ключ ────────────────────────────
+    block = KOLYA_PAIR.passport_block("person:kolya")
+    check("паспортный блок содержит публичный ключ, алгоритм и отпечаток",
+          block["public_key"] == KOLYA_PAIR.public and block["alg"] == ALG_ED25519
+          and block["key_id"] == KOLYA_PAIR.key_id, str(block))
+    check("приватного ключа в паспортном блоке нет",
+          KOLYA_PAIR.private not in canonical(block))
+    check("паспорт переносим как JSON", json.loads(canonical(block))["profile"] == "person:kolya")
+    check("приватный ключ не печатается в repr пары ключей",
+          KOLYA_PAIR.private not in repr(KOLYA_PAIR), repr(KOLYA_PAIR))
+    restored = new_issuer_key(bytes.fromhex(KOLYA_PAIR.private))
+    check("пара ключей восстанавливается из seed — паспорт не надо хранить дважды",
+          restored.public == KOLYA_PAIR.public and restored.key_id == KOLYA_PAIR.key_id)
+    # Ed25519 детерминирован, поэтому пара, собранная из двух сохранённых строк
+    # (как её хранил бы стенд), обязана дать БИТ В БИТ ту же подпись.
+    stored = SigningKey(private=KOLYA_PAIR.private, public=KOLYA_PAIR.public)
+    check("пара ключей из сохранённых строк подписывает то же самое",
+          sign(cred, stored).signature == cred.signature)
+    check("разные issuer-ы различимы по отпечатку клейма",
+          KOLYA_PAIR.key_id != PETRA_PAIR.key_id != STRANGER_PAIR.key_id)
+
+    # ── переносимость файлом ──────────────────────────────────────────────
+    back = Credential.from_json(cred.to_json())
+    check("письмо с Ed25519 выдерживает перенос через JSON без потерь", back == cred)
+    ok, _ = verify(back, ledgers, public_key=KOLYA_PAIR.public)
+    check("перенесённое письмо проверяется так же", ok)
+
+    return {"ed": cred, "forged": forged, "impostor": impostor}
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# 8. Совместимость: унаследованные hmac-письма и разные уровни доверия
+# ────────────────────────────────────────────────────────────────────────────
+
+
+def test_compatibility(env: dict, creds: dict) -> None:
+    print("\nСовместимость с ранее выданными письмами (alg=hmac-sha256):")
+    ledgers, cred1 = env["ledgers"], creds["cred1"]
+
+    check("унаследованное письмо так и объявляет свой алгоритм",
+          cred1.alg == ALG_HMAC, cred1.alg)
+    check("в его подписываемом теле поля public_key НЕТ — иначе сломались бы все старые",
+          "public_key" not in cred1.signed_body())
+    check("и в переносимой форме его тоже нет", "public_key" not in cred1.to_dict())
+
+    v = examine(cred1, ledgers, key=KOLYA_KEY)
+    check("старое письмо по-прежнему проверяется предъявленным секретом", v.ok,
+          "; ".join(v.reasons))
+    check("уровень назван «проверено с секретом», а не публичным",
+          v.level == LEVEL_SECRET and not v.public, v.level)
+
+    # Письмо, собранное по старому формату ВРУЧНУЮ (см. legacy_hmac_letter):
+    # так проверяется не «мы умеем читать то, что сами написали», а формат.
+    raw = legacy_hmac_letter(cred1, KOLYA_KEY)
+    old = Credential.from_json(raw)
+    check("письмо старого формата читается новой реализацией",
+          old.commitment_id == cred1.commitment_id and old.alg == ALG_HMAC)
+    check("его key_id сошёлся с отпечатком секрета", old.key_id == key_id(KOLYA_KEY))
+    v = examine(old, ledgers, key=KOLYA_KEY)
+    check("подпись, посчитанная в тесте по первоисточнику, принята модулем", v.ok,
+          "; ".join(v.reasons))
+    check("и такое письмо тоже не считается публично проверяемым", not v.public)
+
+    ok, reasons = verify(old, ledgers, public_key=KOLYA_PAIR.public)
+    check("публичным ключом симметричное письмо проверить нельзя — и так и сказано",
+          not ok and has(reasons, "публичным ключом проверяется только"), "; ".join(reasons))
+    ok, reasons = verify(cred1, ledgers, key=KOLYA_PAIR)
+    check("пара Ed25519 не подходит к симметричной подписи — причина названа",
+          not ok and has(reasons, "такой ключ к этой подписи не подходит"),
+          "; ".join(reasons))
+
+    unknown = replace(cred1, alg="rsa-pkcs1")
+    ok, reasons = verify(unknown, ledgers, key=KOLYA_KEY)
+    check("неизвестный алгоритм подписи отвергнут",
+          not ok and has(reasons, "неизвестный алгоритм"), "; ".join(reasons))
+
+    # Симметричное письмо, в которое дописали публичный ключ: HMAC от этого не
+    # рвётся (поле не входит в тело подписи), и именно поэтому такое письмо
+    # должно быть названо негодным, а не тихо проверено «как раньше».
+    dressed = replace(cred1, public_key=KOLYA_PAIR.public)
+    ok, reasons = verify(dressed, ledgers, key=KOLYA_KEY)
+    check("симметричное письмо с дописанным публичным ключом отвергнуто",
+          not ok and has(reasons, "подписью не покрыто"), "; ".join(reasons))
+    check("а его HMAC-подпись при этом по-прежнему сходится — поле не в теле",
+          dressed.signed_by(KOLYA_KEY))
+
+
+def test_levels_in_portfolio(env: dict, creds: dict, ed_creds: dict) -> None:
+    print("\nПортфолио: переносимое отдельно от проверяемого-с-секретом:")
+    ledgers = env["ledgers"]
+    ed_cred = ed_creds["ed"]           # ed25519, работа w1, issuer kolya
+    hmac_cred = creds["cred2"]         # hmac, работа w2, issuer petra
+    forged = ed_creds["impostor"]      # ed25519 чужим ключом от имени kolya
+
+    port = Portfolio("person:marina")
+    for c in (ed_cred, hmac_cred, forged):
+        port.add(c)
+
+    # То, что знает проверяющий: паспортный ключ kolya и старый секрет petra.
+    # Один словарь на обе схемы — какую применить, говорит `alg` самого письма.
+    known = {"person:kolya": KOLYA_PAIR.public, "person:petra": PETRA_KEY}
+    good, bad = port.verifiable(ledgers, known)
+    check("оба настоящих письма проверены, хотя подписаны разными схемами",
+          len(good) == 2, str([(c.issuer, c.alg) for c in good]))
+    check("подделка отвергнута", len(bad) == 1 and bad[0][0].note == forged.note,
+          str([(c.issuer, rs) for c, rs in bad]))
+
+    pub_good, pub_bad = port.publicly_verifiable(ledgers, {"person:kolya": KOLYA_PAIR.public})
+    check("публично проверяемым оказалось только письмо с Ed25519",
+          len(pub_good) == 1 and pub_good[0].alg == ALG_ED25519,
+          str([c.alg for c in pub_good]))
+    reasons_hmac = next(rs for c, rs in pub_bad if c.alg == ALG_HMAC)
+    check("унаследованное письмо названо непереносимым, а не поддельным",
+          has(reasons_hmac, "симметричная схема"), "; ".join(reasons_hmac))
+
+    s = port.summary(ledgers, known)
+    check("в сводке посчитаны уровни проверки",
+          s["levels"] == {LEVEL_PUBLIC: 1, LEVEL_SECRET: 1}, str(s["levels"]))
+    check("публично проверяемых — одно", s["publicly_verifiable"] == 1,
+          str(s["publicly_verifiable"]))
+    check("папка целиком НЕ помечена переносимой: в ней есть симметричное письмо",
+          s["portable"] is False)
+    check("в сводке видно, какими схемами подписаны учтённые письма",
+          s["algorithms"] == sorted([ALG_ED25519, ALG_HMAC]), str(s["algorithms"]))
+    check("клейма учтённых писем перечислены отпечатками",
+          s["key_ids"] == sorted([ed_cred.key_id, hmac_cred.key_id]), str(s["key_ids"]))
+    check("обе работы учтены по обязательствам", s["works"] == 2, str(s["works"]))
+
+    # Папка только из Ed25519-писем переносима целиком — и это ровно то, чего
+    # не умела симметричная схема: репутация уходит вместе с исполнителем.
+    second = issue(env["w2"]["commitment"], ledgers, "person:petra", "person:marina", 4,
+                   "одна доработка", key=PETRA_PAIR, work_ref=env["w2"]["work_ref"],
+                   service=SERVICE, verb="contract.sign")
+    portable = Portfolio("person:marina", [ed_cred, second])
+    passports = {"person:kolya": KOLYA_PAIR.public, "person:petra": PETRA_PAIR.public}
+    s2 = portable.summary(ledgers, passports)
+    check("папка из одних Ed25519-писем проверяется целиком без секретов",
+          s2["publicly_verifiable"] == 2 and s2["portable"] is True, str(s2["levels"]))
+    check("и средняя оценка в ней считается по тем же правилам",
+          s2["average_rating"] == 4.5, str(s2["average_rating"]))
+
+    # Та же папка, перенесённая файлом и проверенная посторонним процессом.
+    restored = Portfolio.from_json(portable.to_json())
+    check("папка с Ed25519 выдерживает перенос через JSON",
+          len(restored) == 2 and all(c.alg == ALG_ED25519 for c in restored))
+    out = third_party(restored.credentials[1], ledgers, PETRA_PAIR.public)
+    check("перенесённое письмо проверил посторонний процесс по паспорту petra",
+          out["ok"] and out["level"] == LEVEL_PUBLIC, str(out))
+    check("ни один приватный ключ в переносимую папку не попал",
+          KOLYA_PAIR.private not in portable.to_json()
+          and PETRA_PAIR.private not in portable.to_json())
+
+
+# ────────────────────────────────────────────────────────────────────────────
+
+def start_guild(tmp: Path, attempts: int = 4):
+    """Поднять свой цех и убедиться, что отвечает ИМЕННО ОН.
+
+    Подбора свободного порта недостаточно: между проверкой и bind порт может
+    занять кто угодно — в том числе второй прогон этого же набора. Тогда наш
+    сервис умирает с «адрес занят», а HTTP по этому адресу продолжает отвечать,
+    и тест уходит измерять ЧУЖОЙ цех, отчитываясь зелёным. Это та самая ошибка,
+    из-за которой здесь вообще отказались от фиксированных портов, и одного
+    подбора она не лечит.
+
+    Поэтому после того, как адрес ответил, проверяется, что НАШ процесс жив.
+    Если он умер — отвечает не он, порт признаётся негодным, и берётся
+    следующий. `stderr` сервиса уходит в файл, а не в /dev/null: сервис,
+    который не поднялся, обязан объяснить причину.
+    """
+    for _ in range(attempts):
+        port = pick_port()
+        log = tmp / f"guild-{port}.log"
+        handle = log.open("w", encoding="utf-8")
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "act.services.freelance.server",
+             "--port", str(port), "--db", str(tmp / f"guild-{port}.db"), "--reset"],
+            cwd=str(ROOT), stdout=handle, stderr=handle,
+        )
+        up = wait_up(f"http://127.0.0.1:{port}/api/health")
+        time.sleep(0.3)  # дать нашему процессу упасть, если адрес уже занят
+        if up and proc.poll() is None:
+            return port, proc, handle, log
+        tail = log.read_text(encoding="utf-8", errors="replace")[-200:]
+        print(f"    порт :{port} не подошёл (ответил {up}, код выхода {proc.poll()}): "
+              f"{tail.strip() or 'без сообщений'} — берём следующий")
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+        handle.close()
+    return None
+
 
 def main() -> int:
-    db = Path(tempfile.gettempdir()) / "npp_credential_test.db"
-    if db.exists():
-        db.unlink()
-    port = 8241
     global BASE
-    BASE = f"http://127.0.0.1:{port}"
 
-    proc = subprocess.Popen(
-        [sys.executable, "-m", "act.services.freelance.server",
-         "--port", str(port), "--db", str(db), "--reset"],
-        cwd=str(ROOT), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    )
-    try:
-        if not wait_up(f"{BASE}/api/health"):
-            print("✗ сервис цеха не поднялся")
+    # База цеха и журналы живут в одном временном каталоге прогона, а не по
+    # постоянному пути в /tmp. Постоянный путь делал два одновременных прогона
+    # невозможными ровно так же, как это делал фиксированный порт: второй
+    # сбрасывал базу первому и ронял его на половине сценария.
+    with tempfile.TemporaryDirectory() as t:
+        tmp = Path(t)
+        started = start_guild(tmp)
+        if started is None:
+            print("✗ свой сервис цеха поднять не удалось")
             return 1
-        print(f"Сервис цеха поднят на :{port}")
+        port, proc, handle, log = started
+        BASE = f"http://127.0.0.1:{port}"
+        try:
+            print(f"Сервис цеха поднят на :{port}")
 
-        reg = Registry().load_dir(ROOT / "act/manifests").rebind(SERVICE, BASE)
-        with tempfile.TemporaryDirectory() as t:
-            tmp = Path(t)
+            reg = Registry().load_dir(ROOT / "act/manifests").rebind(SERVICE, BASE)
             env = test_real_work(reg, tmp)
             if not env:
                 print("✗ без настоящей работы остальные проверки не имеют смысла")
@@ -617,9 +1039,13 @@ def main() -> int:
             test_tampered_ledger(env, creds, tmp)
             test_portable(env, creds)
             test_portfolio(env, creds)
-    finally:
-        proc.terminate()
-        proc.wait(timeout=5)
+            ed_creds = test_asymmetric(env)
+            test_compatibility(env, creds)
+            test_levels_in_portfolio(env, creds, ed_creds)
+        finally:
+            proc.terminate()
+            proc.wait(timeout=5)
+            handle.close()
 
     print(f"\n{'─' * 58}")
     if FAILED:

@@ -18,6 +18,7 @@
     schedule_guard — предикат H8: неисполнимое расписание блокируется до действия
     prober     — измерение живого сервиса вместо веры его манифесту
     credential — переносимое свидетельство о выполненной работе
+    crypto     — Ed25519 на чистом Python (RFC 8032), без зависимостей
 """
 
 __version__ = "1.0"
@@ -32,10 +33,17 @@ from .profile import LevelProfile, ProfileError, Requirement, covers, load_level
 from .router import CapabilityRouter, RouteDecision, RouterError
 from .settlement import Book, SettlementError
 from .market import Deal, Party, Preference
-from .calendar import Conflict, Entry, build_timeline, detect_conflicts, explain
+from .calendar import (
+    Conflict, Entry, When, WhenError,
+    build_timeline, detect_conflicts, explain, normalize_when,
+)
 from .schedule_guard import ScheduleGuard
 from .prober import Discrepancy, MeasuredProfile, ProbeError, Prober, measure
-from .credential import Credential, CredentialError, Portfolio, issue, sign, verify
+from .credential import (
+    ALG_ED25519, ALG_HMAC, Credential, CredentialError, Portfolio, SigningKey,
+    issue, new_issuer_key, sign, verify,
+)
+from .crypto import ed25519
 
 __all__ = [
     # ядро
@@ -52,9 +60,12 @@ __all__ = [
     "Book", "SettlementError",
     "Deal", "Party", "Preference",
     # время
-    "Conflict", "Entry", "build_timeline", "detect_conflicts", "explain",
+    "Conflict", "Entry", "When", "WhenError",
+    "build_timeline", "detect_conflicts", "explain", "normalize_when",
     "ScheduleGuard",
     # доверие: измерение вместо заявления, свидетельство вместо звёздочек
     "Prober", "MeasuredProfile", "Discrepancy", "ProbeError", "measure",
-    "Credential", "CredentialError", "Portfolio", "issue", "sign", "verify",
+    "Credential", "CredentialError", "Portfolio", "SigningKey",
+    "ALG_ED25519", "ALG_HMAC", "issue", "new_issuer_key", "sign", "verify",
+    "ed25519",
 ]

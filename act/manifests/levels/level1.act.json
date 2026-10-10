@@ -33,21 +33,38 @@
       {
         "code": "stock-not-checked",
         "severity": "high",
-        "detail": "заказ 99999 роз при остатке 48 проходит с HTTP 201",
-        "evidence": "в /api/orders выбирается 'SELECT name, price FROM products' — колонка stock не читается и ни с чем не сравнивается"
+        "detail": "заказ 1000000 шт. при остатке 50 принят с HTTP 201, и остаток НЕ изменился: 50 → 50",
+        "evidence": "в /api/orders выбирается 'SELECT name, price FROM products' (stock не читается); списание 'UPDATE products SET stock = stock - ?' нарушает CHECK (stock >= 0) из schema.sql, а SQLite3Stmt::execute() в PHP возвращает false с warning вместо исключения, поэтому catch/ROLLBACK не срабатывает и COMMIT проходит",
+        "measured": true
       },
       {
         "code": "conformance-blind-spot",
         "severity": "info",
         "detail": "22/22 на контракт-тесте при незакрытом складе",
         "evidence": "контракт-тест проверяет форму ответа, а не инварианты предметной области"
+      },
+      {
+        "code": "idempotency-declared-not-implemented",
+        "severity": "high",
+        "detail": "повтор запроса с тем же client_token создаёт ВТОРОЕ обязательство",
+        "evidence": "измерено test_stock_live: два разных order_number на один ключ",
+        "measured": true
+      },
+      {
+        "code": "commitment-inventory-divergence",
+        "severity": "high",
+        "detail": "принятое обязательство не отражается на складе — учёт расходится молча",
+        "evidence": "измерено: order_items.quantity=1000000, products.stock=50 без изменения",
+        "measured": true
       }
     ],
     "audit": {
       "source": "аудит семи уровней daten2",
       "verified_against": "origin/claude/level1-php-GBpVR:index.php"
     },
-    "disclaimer": "Профиль — ЗАЯВЛЕНИЕ уровня о себе, а не доказательство (SPEC-NPP-ACT.md §10.1). Потребитель обязан проверять поведение, а не верить полю: act/tests/test_profile.py сверяет каждое утверждение этого блока с настоящими исходниками уровня."
+    "disclaimer": "Профиль — ЗАЯВЛЕНИЕ уровня о себе, а не доказательство (SPEC-NPP-ACT.md §10.1). Потребитель обязан проверять поведение, а не верить полю: act/tests/test_profile.py сверяет каждое утверждение этого блока с настоящими исходниками уровня.",
+    "idempotency_honored": false,
+    "idempotency_evidence": "measured"
   },
   "capabilities": [
     {
@@ -97,7 +114,7 @@
     {
       "id": "order.create",
       "title": "Оформить заказ",
-      "description": "POST /api/orders. Необратим: отмены в контракте v1 нет, поэтому требуется подтверждение владельца профиля.",
+      "description": "POST /api/orders. Необратим: отмены в контракте v1 нет, поэтому требуется подтверждение владельца профиля",
       "effect": "commit",
       "reversible": false,
       "cost": {
