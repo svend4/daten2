@@ -65,6 +65,17 @@
 наблюдением, количество — по единственной предметной догадке модуля
 (`QTY_KEYS`), остальное — заглушкой.
 
+Три правила, которые не дают пробе отчитываться о том, чего она не проверяла
+─────────────────────────────────────────────────────────────────────────────
+  1. Склад «проверен» — только по отказу 4xx с JSON-сообщением о складе и без
+     признаков сбоя (stock_verdict). 5xx и нечитаемое тело — «не проверено»:
+     падение базы не является решением склада.
+  2. 404 на путь с параметром — «маршрута нет» только по идентификатору, который
+     сам сервис выдал под тем же именем; иначе — «не выяснено» (_route_verdict).
+     Нерешённый маршрут не входит ни в пройденные, ни в проваленные.
+  3. Заявление о контракте сравнивается с измерением только в одних единицах
+     (глаголы). Иначе вердикт «несопоставимо», а не «совпало» (compare).
+
 Запуск:
     python3 -m act.npp_act.prober --manifest act/manifests/venue.act.json \\
             --base-url http://127.0.0.1:8210 [--json]
@@ -74,6 +85,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import threading
 import time
@@ -97,7 +109,27 @@ PROBES = (LATENCY, CONCURRENCY, CONTRACT, IDEMPOTENCY, STOCK)
 
 #: Направление расхождения. Различать обязательно: скромность безвредна,
 #: приукрашивание — это то, из-за чего агент выберет негодный сервис.
-EMBELLISHED, MODEST, UNVERIFIABLE = "embellished", "modest", "unverifiable"
+#: `incomparable` — заявление и измерение выражены в РАЗНЫХ единицах (§10.1):
+#: доли несопоставимы, поэтому ни совпадением, ни расхождением это не является.
+EMBELLISHED, MODEST, UNVERIFIABLE, INCOMPARABLE = (
+    "embellished", "modest", "unverifiable", "incomparable",
+)
+
+#: Что 404/405/501 говорит о маршруте глагола (см. Prober._route_verdict).
+#: «Не выяснено» — отдельный исход: ни «маршрут есть», ни «маршрута нет».
+ROUTE_MISSING, ROUTE_UNRESOLVED = "missing", "unresolved"
+
+#: Слова складского отказа в тексте сообщения (без учёта регистра, по основе:
+#: «остат» покрывает «остаток», «остатка», «остатков»).
+STOCK_WORDS = ("остат", "склад", "stock", "недостаточно",
+               "insufficient", "not enough", "out of stock")
+
+#: Слова сбоя сервиса в теле ответа. Если они есть, отказ НЕ доказывает проверку
+#: склада, даже когда в том же теле стоят складские слова: «stock >= 0» внутри
+#: трассировки — это падение базы, а не решение склада.
+FAILURE_WORDS = ("traceback", "exception", "checkviolation", "constraint", "internal")
+
+_PATH_PARAM_RE = re.compile(r"\{([^{}]+)\}")
 
 #: Суффиксы, по которым видно, что значение — РУЧКА ресурса, а не данные.
 #: Такое значение нельзя выдумать: выдуманный токен даст 404 и обвинит сервис
@@ -146,6 +178,10 @@ class ProbeResult:
     `applicable=False` — это НЕ провал: у сервиса, продающего время, нет склада,
     и выдать по этому поводу вердикт было бы ложью. Неприменимость обязана
     отличаться от отрицательного результата, иначе отчёт врёт в обе стороны.
+
+    `applicable=True, ok=None` — проба проведена, но вердикт установить нельзя:
+    например, сервис ответил 500 вместо отказа по складу. Это «не проверено»,
+    а не «нет» и не «да»: отказ сервиса сам по себе ещё не доказательство.
     """
 
     name: str
@@ -234,6 +270,10 @@ class MeasuredProfile:
         passed, total = self.conformance
         lines = [f"{self.service} @ {self.base_url} — измерено {self.measured_at}",
                  f"  контракт: {passed}/{total} глаголов ответили по своей же схеме"]
+        unresolved = self.value("unresolved_verbs", []) or []
+        if unresolved:
+            # Такие глаголы НЕ входят в итог выше: показываем, что их не хватает.
+            lines.append("  маршрут НЕ ВЫЯСНЕН (в итог не входит): " + ", ".join(unresolved))
         for name in sorted(self.features):
             f = self.features[name]
             lines.append(f"  {name} = {f.value!r}  [{f.probe}] {f.evidence}")
@@ -273,7 +313,7 @@ class Discrepancy:
 
     def human(self) -> str:
         mark = {EMBELLISHED: "приукрашено", MODEST: "скромность",
-                UNVERIFIABLE: "не проверяемо"}[self.direction]
+                UNVERIFIABLE: "не проверяемо", INCOMPARABLE: "несопоставимо"}[self.direction]
         return (f"[{self.severity}/{mark}] {self.field}: "
                 f"заявлено {self.declared!r}, измерено {self.measured!r} — {self.detail}")
 
@@ -352,6 +392,11 @@ def _is_handle(key: str) -> bool:
     return key.endswith(HANDLE_SUFFIXES)
 
 
+def _path_params(cap: Capability) -> tuple[str, ...]:
+    """Имена параметров пути глагола: `/api/orders/{order_number}` → ('order_number',)."""
+    return tuple(_PATH_PARAM_RE.findall(str(cap.binding.get("path", ""))))
+
+
 def _element_keys(spec: Any) -> tuple[str, ...]:
     """Имена полей элемента из спецификации вида `array of {product_id, quantity}`.
 
@@ -397,6 +442,74 @@ def _percentile(values: list[float], share: float) -> float:
     ordered = sorted(values)
     idx = max(0, min(len(ordered) - 1, int(round(share * len(ordered) + 0.5)) - 1))
     return ordered[idx]
+
+
+def _decode_body(raw: str) -> tuple[Any, bool]:
+    """Тело ответа → (разобранное, было ли оно JSON).
+
+    Пустое тело — не JSON. Непарсящееся тело отдаётся строкой и НЕ роняет пробу:
+    раньше 2xx с HTML-страницей бросал JSONDecodeError прямо из пробы.
+    """
+    if not raw.strip():
+        return None, False
+    try:
+        return json.loads(raw), True
+    except json.JSONDecodeError:
+        return raw, False
+
+
+def _message_text(body: Any) -> str:
+    """Строковые значения тела, склеенные в текст сообщения. Ключи — не сообщение."""
+    if isinstance(body, str):
+        return body
+    if isinstance(body, dict):
+        return " ".join(_message_text(v) for v in body.values())
+    if isinstance(body, list):
+        return " ".join(_message_text(v) for v in body)
+    return ""
+
+
+def stock_verdict(status: int, body: Any, is_json: bool) -> tuple[bool | None, str]:
+    """Что ответ сервиса на завышенный заказ говорит о складе → (вердикт, наблюдение).
+
+    Вердикт `True` («склад проверяется») выдаётся ТОЛЬКО когда сходятся три
+    условия сразу:
+
+      (а) статус 4xx: сервис ОТКАЗАЛ, а не упал и не принял заказ;
+      (б) тело — JSON-объект, и его строковые значения называют складскую
+          причину (см. STOCK_WORDS);
+      (в) в теле нет признаков сбоя (см. FAILURE_WORDS): отказ по существу не
+          выглядит падением базы.
+
+    `False` («остаток не читается») — 2xx: заказ принят.
+
+    Во всех остальных случаях — `None` («не проверено»), причина названа в
+    наблюдении. Вердикт «не проверено» допустим; вердикт «проверено» без
+    доказательства — нет.
+
+    Почему 5xx никогда не считается проверкой, какие бы слова ни были в теле:
+    падение базы выглядит как отказ, но о складе не говорит ничего. Измерено на
+    daten2: L3, L5, L7 отвечали 500 или 400 CheckViolation ПОСЛЕ записи строк
+    заказа. Инструмент тогда записал бы stock_checked=true — а проверки не было,
+    и частичная запись осталась.
+    """
+    if 200 <= status < 300:
+        return False, "ПРИНЯТ, значит остаток не читается"
+    # Наблюдение ниже уже стоит после «HTTP N» в evidence пробы, поэтому статус
+    # в нём не повторяем.
+    if not 400 <= status < 500:
+        return None, ("сбой или отсутствие ответа, а не отказ по существу: "
+                      "склад НЕ ПРОВЕРЕН")
+    if not (is_json and isinstance(body, dict)):
+        return None, ("тело не JSON-объект: сообщения не разобрать, склад НЕ ПРОВЕРЕН")
+    dumped = json.dumps(body, ensure_ascii=False).lower()
+    failures = [w for w in FAILURE_WORDS if w in dumped]
+    if failures:
+        return None, (f"в теле признаки сбоя ({', '.join(failures)}): склад НЕ ПРОВЕРЕН")
+    text = _message_text(body)
+    if any(w in text.lower() for w in STOCK_WORDS):
+        return True, f"отказ по складу: «{text[:120]}»"
+    return None, "сообщение не о складе: склад НЕ ПРОВЕРЕН"
 
 
 class Prober:
@@ -459,7 +572,13 @@ class Prober:
     # ---------- HTTP ----------
 
     def _http(self, method: str, url: str, body: dict | None,
-              headers: dict[str, str]) -> tuple[int, Any, float]:
+              headers: dict[str, str]) -> tuple[int, Any, float, bool]:
+        """Один HTTP-вызов → (статус, тело, мс, тело_было_JSON).
+
+        Флаг отдельно от тела нужен потому, что нечитаемое тело ошибки
+        оборачивается в {"error": ...} — так удобно для отчёта, но выдавать такую
+        обёртку за JSON-объект нельзя: складской вердикт опирается на форму тела.
+        """
         data = json.dumps(body, ensure_ascii=False).encode("utf-8") if body is not None else None
         req = urllib.request.Request(url, data=data, headers=headers, method=method)
         started = time.perf_counter()
@@ -467,23 +586,31 @@ class Prober:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 raw = resp.read().decode("utf-8", "replace")
                 ms = (time.perf_counter() - started) * 1000
-                return resp.status, (json.loads(raw) if raw.strip() else None), ms
+                parsed, is_json = _decode_body(raw)
+                return resp.status, parsed, ms, is_json
         except urllib.error.HTTPError as e:
             raw = e.read().decode("utf-8", "replace")
             ms = (time.perf_counter() - started) * 1000
-            try:
-                return e.code, json.loads(raw), ms
-            except json.JSONDecodeError:
-                return e.code, {"error": raw[:200]}, ms
+            parsed, is_json = _decode_body(raw)
+            if not is_json:
+                parsed = {"error": raw[:200]}
+            return e.code, parsed, ms, is_json
         except (urllib.error.URLError, OSError, TimeoutError) as e:
             ms = (time.perf_counter() - started) * 1000
             # status=0 означает «сервис не ответил вовсе» — это не 5xx сервиса,
             # и смешивать два разных события в одно нельзя.
-            return 0, {"error": f"не ответил: {e}"}, ms
+            return 0, {"error": f"не ответил: {e}"}, ms, False
 
     def _invoke(self, cap: Capability, payload: dict[str, Any],
                 idem_key: str | None = None, track: bool = True) -> tuple[int, Any, float]:
-        """Один живой вызов глагола. Единственное место, где проба трогает сеть."""
+        """Один живой вызов глагола без признака формы тела (см. _invoke_full)."""
+        status, parsed, ms, _ = self._invoke_full(cap, payload, idem_key=idem_key, track=track)
+        return status, parsed, ms
+
+    def _invoke_full(self, cap: Capability, payload: dict[str, Any],
+                     idem_key: str | None = None,
+                     track: bool = True) -> tuple[int, Any, float, bool]:
+        """Единственное место, где проба трогает сеть → (статус, тело, мс, тело_JSON)."""
         with self._lock:
             if self.calls >= self.max_calls:
                 raise ProbeError(f"исчерпан лимит вызовов ({self.max_calls}): "
@@ -497,7 +624,7 @@ class Prober:
             if token in path:
                 path = path.replace(token, urllib.parse.quote(str(body.pop(key)), safe=""))
         if "{" in path:
-            return 0, {"error": f"незаполненный path-параметр в '{path}'"}, 0.0
+            return 0, {"error": f"незаполненный path-параметр в '{path}'"}, 0.0, False
 
         headers = {"Accept": "application/json"}
         slot = cap.idempotency_slot()
@@ -519,12 +646,12 @@ class Prober:
                 {k: v for k, v in body.items() if not isinstance(v, (dict, list))}
             )
 
-        status, parsed, ms = self._http(method, url, send, headers)
+        status, parsed, ms, is_json = self._http(method, url, send, headers)
         if status == 0:
             self._failures += 1
         if track:
             self._after(cap, payload, status, parsed)
-        return status, parsed, ms
+        return status, parsed, ms, is_json
 
     # ---------- учёт наблюдений ----------
 
@@ -817,6 +944,53 @@ class Prober:
 
     # ---------- проба 1: контракт ----------
 
+    def _route_verdict(self, cap: Capability, payload: dict[str, Any],
+                       status: int) -> tuple[str | None, str]:
+        """Что код ответа говорит о МАРШРУТЕ глагола → (вердикт, наблюдение).
+
+        Вердикт `None` — код не касается маршрута (сервис ответил, либо не ответил
+        вовсе): обычная сверка формы, как и раньше.
+
+        405 и 501 — маршрута под этим методом нет при любом объекте: `missing` всегда.
+
+        404 — самый двусмысленный код: «объекта нет» и «маршрута нет» отвечают им
+        одинаково. Поэтому смотрим, ЧЕМ проба адресовалась:
+
+          · путь с параметрами, и КАЖДЫЙ параметр — реальный идентификатор, который
+            сам сервис выдал под тем же именем (order_number из ответа order.create)
+            → `missing`. Сервис только что сообщил, что объект создан; 404 по его
+            же ручке значит, что маршрута чтения нет. Оговорка: проба не отличает
+            это от удаления объекта между созданием и чтением. Её собственный
+            сценарий (создал → сразу читает) делает удаление маловероятным, но не
+            исключает, поэтому граница записана здесь, а не замолчана.
+          · путь с параметрами, а хотя бы один параметр — заглушка или чужая ручка
+            (`id` вместо `order_id`, подставленная по догадке) → `unresolved`:
+            объекта могло не быть, а маршрут — быть. Объявить такой маршрут
+            отсутствующим значило бы обвинить сервис в незнании самой пробы.
+          · путь без параметров и без входа → `missing` (адрес сам по себе не
+            нашёлся, как и раньше). Путь без параметров, но с входом (фильтр) →
+            `unresolved`: пустая выборка по фильтру отвечает тем же кодом.
+        """
+        if status in (405, 501):
+            return ROUTE_MISSING, f"HTTP {status}: маршрута под методом {cap.binding.get('method')} нет"
+        if status != 404:
+            return None, ""
+        params = _path_params(cap)
+        if not params:
+            if not payload:
+                return ROUTE_MISSING, "HTTP 404 на путь без параметров и без входа: маршрута нет"
+            return ROUTE_UNRESOLVED, ("HTTP 404 на путь без параметров, но с входом: пустая "
+                                      "выборка по фильтру дала бы тот же код")
+        real = [k for k in params if k in self._fresh and self._fresh[k] == payload.get(k)]
+        if len(real) == len(params):
+            return ROUTE_MISSING, (f"HTTP 404 по реальному идентификатору, который выдал сам "
+                                   f"сервис ({', '.join(params)}): объект существует, значит "
+                                   "маршрута чтения нет")
+        fake = [k for k in params if k not in real]
+        return ROUTE_UNRESOLVED, (f"HTTP 404 без реального идентификатора у {', '.join(fake)} "
+                                  "(проба подставила заглушку или чужую ручку): отсутствие "
+                                  "объекта и отсутствие маршрута здесь не различить")
+
     def contract_probe(self) -> ProbeResult:
         """Вызвать каждый объявленный глагол и сверить форму ответа с его схемой.
 
@@ -825,9 +999,15 @@ class Prober:
         (§4.2 — начинать с обратимого). Поэтому сначала проходим по возрастанию
         тяжести на дешёвых производителях, а во втором проходе возвращаемся к
         пропущенным — к тому времени ручки уже наблюдены законно.
+
+        Маршрут, который проба не смогла выяснить (404 без реального идентификатора),
+        не проходит и не проваливается: глагол выведен из итога и назван в
+        `unresolved`. Иначе проба, не знающая, есть ли маршрут, выдавала бы
+        «не пройдено» без доказательства. См. _route_verdict.
         """
         verbs: dict[str, dict[str, Any]] = {}
         skipped: dict[str, str] = {}
+        unresolved: dict[str, dict[str, Any]] = {}
         missing_verbs: list[str] = []
 
         def run(cap: Capability, allow: int) -> bool:
@@ -835,7 +1015,14 @@ class Prober:
             if missing:
                 skipped[cap.id] = "нет наблюдённого значения для " + ", ".join(missing)
                 return False
+            skipped.pop(cap.id, None)
+            unresolved.pop(cap.id, None)
             status, body, ms = self._invoke(cap, payload, idem_key=_fresh_key(cap))
+            route, route_note = self._route_verdict(cap, payload, status)
+            if route == ROUTE_UNRESOLVED:
+                verbs.pop(cap.id, None)
+                unresolved[cap.id] = {"status": status, "reason": route_note}
+                return True
             ok_status = 200 <= status < 300
             shape_ok, problems = check_shape(cap.output or {}, body) if ok_status else (False, [])
             detail = ""
@@ -845,39 +1032,54 @@ class Prober:
                     detail += f": {str(body['error'])[:120]}"
             elif problems:
                 detail = "; ".join(problems)
+            if route == ROUTE_MISSING:
+                detail = "; ".join(part for part in (detail, route_note) if part)
+                missing_verbs.append(cap.id)
             verbs[cap.id] = {"status": status, "ok": ok_status and shape_ok,
                              "shape_ok": shape_ok, "ms": round(ms, 1), "detail": detail,
                              "effect": cap.effect}
-            skipped.pop(cap.id, None)
-            # 404/405/501 на пути БЕЗ параметров — это не «не нашли объект», а
-            # «такого маршрута нет»: глагол объявлен, но не реализован.
-            if status in (405, 501) or (status == 404 and not payload):
-                missing_verbs.append(cap.id)
             return True
 
         order = self._allowed()
         for cap in order:
             run(cap, cap.severity)
         for cap in order:
-            if cap.id in skipped:
+            # Во втором проходе — пропущенные (ручек ещё не было) и нерешённые ЧТЕНИЯ:
+            # после создания объектов их ручки могли появиться. Записывающие глаголы
+            # повторно не вызываем: повтор создал бы второе обязательство.
+            if cap.id in skipped or (cap.id in unresolved and cap.effect == "read"):
                 run(cap, self.max_severity)
 
         passed = sum(1 for v in verbs.values() if v["ok"])
         total = len(verbs)
         declared = len(self.manifest.capabilities)
+        called = total + len(unresolved)
         evidence = (
-            f"вызвано {total} из {declared} объявленных глаголов; "
+            f"вызвано {called} из {declared} объявленных глаголов; "
             f"{passed} ответили по своей же output-схеме"
         )
+        if unresolved:
+            evidence += (f"; маршрут НЕ ВЫЯСНЕН у {len(unresolved)} (в итог не входит): " +
+                         "; ".join(f"{k}: {v['reason']}" for k, v in sorted(unresolved.items())))
         if skipped:
             evidence += f"; пропущено {len(skipped)} (" + \
                 "; ".join(f"{k}: {v}" for k, v in sorted(skipped.items())) + ")"
         if missing_verbs:
-            evidence += "; маршрут отсутствует у: " + ", ".join(sorted(missing_verbs))
+            evidence += "; маршрут отсутствует у: " + ", ".join(sorted(set(missing_verbs)))
+        # Итог: «да» только если все установленные глаголы прошли и ни один маршрут
+        # не остался неясным. Неясный маршрут даёт None: известное совпало, полной
+        # картины нет, и «проверено» без доказательства не выдаём.
+        verdict: bool | None
+        if passed < total or (total == 0 and not unresolved):
+            verdict = False
+        elif unresolved:
+            verdict = None
+        else:
+            verdict = True
         return ProbeResult(
-            CONTRACT, True, (total > 0 and passed == total), evidence,
+            CONTRACT, True, verdict, evidence,
             {"passed": passed, "total": total, "declared": declared,
-             "verbs": verbs, "skipped": skipped,
+             "verbs": verbs, "skipped": skipped, "unresolved": unresolved,
              "missing_verbs": sorted(set(missing_verbs))},
         )
 
@@ -903,7 +1105,21 @@ class Prober:
         return None
 
     def stock_probe(self) -> ProbeResult:
-        """Заказать заведомо больше остатка. Приняли — остаток не проверяется.
+        """Заказать заведомо больше остатка и смотреть, ОТКУДА пришёл ответ.
+
+        Исходы, и только один из них доказывает проверку склада:
+
+          · 2xx — заказ принят: остаток не читается → stock_checked = False;
+          · 4xx, тело — JSON-объект, его сообщение называет складскую причину и
+            в теле нет признаков сбоя → stock_checked = True (отказ по складу
+            НАБЛЮДАЛСЯ);
+          · всё прочее — 5xx, отсутствие ответа, 4xx без складского сообщения,
+            тело не JSON-объект или с признаками сбоя → stock_checked = None
+            («не проверено»), причина названа в наблюдении.
+
+        Вердикт «не проверено» допустим; вердикт «проверено» без доказательства —
+        нет. Правила разбора ответа — в stock_verdict, там же почему 5xx не
+        считается проверкой.
 
         Именно эта проба поймала шесть уровней daten2 из семи: контракт-тест
         проверял ФОРМУ ответа и был зелёным, а заказ 99999 роз при остатке 48
@@ -966,17 +1182,15 @@ class Prober:
                 line[name] = ABSURD_QUANTITY
             payload[field_name] = [line]
             bumped = f"{field_name}[].{'/'.join(sorted(qty_fields))}"
-        status, body, _ = self._invoke(cap, payload, idem_key=_fresh_key(cap, "stock"))
-        accepted = 200 <= status < 300
-        evidence = (
-            f"{cap.id} с {bumped}={ABSURD_QUANTITY} → HTTP {status}: "
-            + ("ПРИНЯТ, значит остаток не читается" if accepted
-               else f"отвергнут ({str((body or {}).get('error', ''))[:120]})")
-        )
-        return ProbeResult(STOCK, True, not accepted, evidence,
+        status, body, _, is_json = self._invoke_full(cap, payload,
+                                                     idem_key=_fresh_key(cap, "stock"))
+        verdict, observation = stock_verdict(status, body, is_json)
+        evidence = f"{cap.id} с {bumped}={ABSURD_QUANTITY} → HTTP {status}: {observation}"
+        return ProbeResult(STOCK, True, verdict, evidence,
                            {"verb": cap.id, "field": field_name, "bumped": bumped,
                             "line": line, "quantity": ABSURD_QUANTITY,
-                            "status": status, "accepted": accepted})
+                            "status": status, "accepted": 200 <= status < 300,
+                            "verdict_basis": observation})
 
     # ---------- проба 3: конкурентность ----------
 
@@ -1317,6 +1531,13 @@ def measure(
         CONTRACT, contract.evidence)
     put("missing_verbs", contract.data.get("missing_verbs", []), CONTRACT,
         contract.evidence)
+    # Маршруты, которые проба не смогла выяснить. Их нет ни в missing_verbs
+    # (признать отсутствующим нельзя), ни в итоге контракта (проверено не было).
+    unresolved = contract.data.get("unresolved", {})
+    put("unresolved_verbs", sorted(unresolved), CONTRACT,
+        ("маршрут не выяснен у: " + "; ".join(f"{k} ({v['reason']})"
+                                               for k, v in sorted(unresolved.items())))
+        if unresolved else "не выяснено ни у одного глагола")
 
     stock = by_name[STOCK]
     put("stock_checked", stock.ok, STOCK, stock.evidence)
@@ -1366,7 +1587,7 @@ def measure(
 # ────────────────────────────────────────────────────────────────────────────
 
 _SEVERITY_ORDER = {"critical": 0, "warning": 1, "info": 2}
-_DIRECTION_ORDER = {EMBELLISHED: 0, UNVERIFIABLE: 1, MODEST: 2}
+_DIRECTION_ORDER = {EMBELLISHED: 0, INCOMPARABLE: 1, UNVERIFIABLE: 2, MODEST: 3}
 
 
 def _boolean_gap(
@@ -1384,7 +1605,8 @@ def _boolean_gap(
             out.append(Discrepancy(
                 name, declared_value, None, UNVERIFIABLE, "info",
                 f"положительное заявление осталось непроверенным: {embellished} — "
-                f"проба оказалась неприменима",
+                f"проба не установила значение (неприменима, либо её ответ не доказывает "
+                f"проверку)",
                 feature.evidence if feature else "проба не проводилась"))
         return
     measured = bool(feature.value)
@@ -1405,6 +1627,10 @@ def compare(declared: LevelProfile, measured: MeasuredProfile) -> list[Discrepan
     выигрывать, и мир от этого не рушится. `unverifiable` — отдельный третий
     случай: положительное заявление, которое проба не смогла ни подтвердить, ни
     опровергнуть. Выдать его за ложь было бы такой же неправдой, как поверить.
+
+    `incomparable` — заявление и измерение выражены в РАЗНЫХ единицах. Доли
+    тогда ничего не говорят друг о друге: ни совпадения, ни расхождения нет,
+    и отчёт обязан сказать «несопоставимо», а не «совпало».
     """
     out: list[Discrepancy] = []
 
@@ -1430,13 +1656,28 @@ def compare(declared: LevelProfile, measured: MeasuredProfile) -> list[Discrepan
 
     # Соответствие контракту: сравниваем доли, а не абсолютные числа —
     # у измерения свой знаменатель (пробуется только то, что удалось вызвать).
+    # НО доли сравнимы только в одних единицах. Измеритель считает ГЛАГОЛЫ, а
+    # знаменатель заявления обязан быть числом глаголов его манифеста. Иначе
+    # заявление считает что-то другое: у уровня 1 daten2 заявлено 22/22 при 4
+    # глаголах — это проверки контракта, и «4/4 = 22/22» было бы мнимым
+    # совпадением. Ограничение: единица выводится из знаменателя, поэтому
+    # проверки, случайно равные числу глаголов, этим признаком не отличить.
     m_passed, m_total = measured.conformance
     if m_total:
         d_ratio, m_ratio = declared.conformance_ratio, m_passed / m_total
         d_text = f"{declared.conformance_passed}/{declared.conformance_total}"
         m_text = f"{m_passed}/{m_total}"
         ev = measured.feature("contract_conformance").evidence
-        if m_ratio < d_ratio - 1e-9:
+        verbs_declared = len(declared.declared_verbs)
+        if declared.conformance_total != verbs_declared:
+            out.append(Discrepancy(
+                "contract_conformance", d_text, m_text, INCOMPARABLE, "warning",
+                f"несопоставимо: заявлено {d_text}, но знаменатель "
+                f"{declared.conformance_total} не равен числу глаголов манифеста "
+                f"({verbs_declared}) — заявление считает, по всей видимости, проверки "
+                f"контракта, а измеритель считает глаголы (измерено {m_text}). "
+                "Доли несопоставимы: ни совпадения, ни расхождения здесь нет", ev))
+        elif m_ratio < d_ratio - 1e-9:
             out.append(Discrepancy(
                 "contract_conformance", d_text, m_text, EMBELLISHED,
                 "critical" if d_ratio >= 1.0 else "warning",
@@ -1467,6 +1708,21 @@ def compare(declared: LevelProfile, measured: MeasuredProfile) -> list[Discrepan
             "признаны нереализованными, но живой сервис их исполняет: "
             + ", ".join(overstated),
             mv.evidence if mv else ""))
+
+    # Маршрут, который проба не смогла выяснить: ни признать отсутствующим, ни
+    # подтвердить реализацию нельзя. Это не приукрашивание и не скромность, а
+    # честное «не проверено»: такой глагол выведен из итога контракта, и без
+    # этой строки совпавшая доля выглядела бы полной картиной.
+    unresolved = sorted(measured.value("unresolved_verbs", []) or [])
+    if unresolved:
+        uf = measured.feature("unresolved_verbs")
+        out.append(Discrepancy(
+            "unresolved_verbs",
+            sorted(v for v in unresolved if v not in declared.missing_verbs),
+            unresolved, UNVERIFIABLE, "info",
+            "маршрут не выяснен: проба не смогла ни подтвердить реализацию, ни признать "
+            "отсутствие — " + ", ".join(unresolved),
+            uf.evidence if uf else ""))
 
     # Идемпотентность заявлена не профилем уровня, а самим манифестом (§4.5),
     # поэтому заявление берём оттуда — это по-прежнему сверка слова с делом.

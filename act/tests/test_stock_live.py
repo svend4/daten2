@@ -570,11 +570,16 @@ def test_compare(shop: Shop) -> None:
           f"{measured.value('stock_checked')}, расхождение "
           f"{by_field.get('stock_checked')}")
 
+    # Прежняя версия утверждала «соответствие сошлось, расхождения нет». Это была
+    # ложная сходимость: заявлено 22 проверки контракта, измерено 4 глагола, и
+    # доли этих чисел не сравнимы. Теперь измеренное 4/4 фиксируется, а расхождение
+    # обязано называться «несопоставимо», а не отсутствовать.
     m_passed, m_total = measured.conformance
-    check("соответствие контракту сошлось: заявлено 22/22 (100%), измерено 4/4 (100%)",
+    cc = by_field.get("contract_conformance")
+    check("контракт измерен 4/4, и разница 22/22 против 4/4 названа несопоставимой",
           (m_passed, m_total) == (4, 4) and declared.conformance_ratio == 1.0
-          and "contract_conformance" not in by_field,
-          f"{m_passed}/{m_total}, расхождение {by_field.get('contract_conformance')}")
+          and cc is not None and cc.direction == "incomparable",
+          f"{m_passed}/{m_total}, расхождение {cc}")
 
     check("нереализованных глаголов нет ни в заявлении, ни в измерении",
           not declared.missing_verbs and not measured.value("missing_verbs")
