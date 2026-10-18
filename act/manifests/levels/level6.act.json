@@ -41,13 +41,22 @@
         "severity": "high",
         "detail": "productId вместо product_id, price строкой, UUID с дефисами вместо 32 hex",
         "evidence": "createOrderSchema принимает items[].productId; Decimal сериализуется строкой"
+      },
+      {
+        "code": "idempotency-declared-not-implemented",
+        "severity": "high",
+        "detail": "контракт не обещает идемпотентность, а протокол её требует для обязательств; повтор с тем же ключом не возвращает то же обязательство",
+        "evidence": "не измерено живьём (разбор списков блокирует пробу входа); код: grep client_token по src/app/api/orders пуст",
+        "measured": false
       }
     ],
     "audit": {
       "source": "аудит семи уровней daten2",
       "verified_against": "origin/claude/level6-nextjs-GBpVR:src/app/api/orders/route.ts"
     },
-    "disclaimer": "Профиль — ЗАЯВЛЕНИЕ уровня о себе, а не доказательство (SPEC-NPP-ACT.md §10.1). Потребитель обязан проверять поведение, а не верить полю: act/tests/test_profile.py сверяет каждое утверждение этого блока с настоящими исходниками уровня."
+    "disclaimer": "Профиль — ЗАЯВЛЕНИЕ уровня о себе, а не доказательство (SPEC-NPP-ACT.md §10.1). Потребитель обязан проверять поведение, а не верить полю: act/tests/test_profile.py сверяет каждое утверждение этого блока с настоящими исходниками уровня.",
+    "idempotency_honored": false,
+    "idempotency_evidence": "code"
   },
   "capabilities": [
     {

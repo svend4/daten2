@@ -34,20 +34,30 @@
         "code": "no-atomic-on-api-path",
         "severity": "high",
         "detail": "создание заказа на API-пути идёт без transaction.atomic",
-        "evidence": "api_create_order() вызывает Order.objects.create и prod.save() вне атомарного блока — сбой на середине оставляет половину заказа"
+        "evidence": "перемер 9aa23bf: при 400 в базе остались Customer, Order и OrderItem на 1000000 шт.; код: в api_create_order нет transaction.atomic",
+        "measured": true
       },
       {
         "code": "stock-not-checked",
         "severity": "high",
         "detail": "остаток не сверяется, prod.stock просто уменьшается",
         "evidence": "в api_create_order() есть 'prod.stock -= qty' и нет ни одного сравнения stock с qty"
+      },
+      {
+        "code": "idempotency-declared-not-implemented",
+        "severity": "high",
+        "detail": "контракт не обещает идемпотентность, а протокол её требует для обязательств; повтор с тем же ключом не возвращает то же обязательство",
+        "evidence": "перемер 9aa23bf: повтор создал второй заказ; api_create_order не читает client_token (grep по shop/ и flower_shop/ пуст)",
+        "measured": true
       }
     ],
     "audit": {
       "source": "аудит семи уровней daten2",
       "verified_against": "origin/claude/level3-django-GBpVR:shop/views.py"
     },
-    "disclaimer": "Профиль — ЗАЯВЛЕНИЕ уровня о себе, а не доказательство (SPEC-NPP-ACT.md §10.1). Потребитель обязан проверять поведение, а не верить полю: act/tests/test_profile.py сверяет каждое утверждение этого блока с настоящими исходниками уровня."
+    "disclaimer": "Профиль — ЗАЯВЛЕНИЕ уровня о себе, а не доказательство (SPEC-NPP-ACT.md §10.1). Потребитель обязан проверять поведение, а не верить полю: act/tests/test_profile.py сверяет каждое утверждение этого блока с настоящими исходниками уровня.",
+    "idempotency_honored": false,
+    "idempotency_evidence": "measured"
   },
   "capabilities": [
     {

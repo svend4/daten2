@@ -41,13 +41,22 @@
         "severity": "info",
         "detail": "витрина требует сборки пакетным менеджером, контракт — нет",
         "evidence": "frontend/ на Vite поднимается отдельным процессом, поэтому offline_capable=false"
+      },
+      {
+        "code": "idempotency-declared-not-implemented",
+        "severity": "high",
+        "detail": "контракт не обещает идемпотентность, а протокол её требует для обязательств; повтор с тем же ключом не возвращает то же обязательство",
+        "evidence": "перемер 9aa23bf: повтор создал второе обязательство; backend/api.py client_token не читает",
+        "measured": true
       }
     ],
     "audit": {
       "source": "аудит семи уровней daten2",
       "verified_against": "origin/claude/level5-react-flask-GBpVR:backend/api.py"
     },
-    "disclaimer": "Профиль — ЗАЯВЛЕНИЕ уровня о себе, а не доказательство (SPEC-NPP-ACT.md §10.1). Потребитель обязан проверять поведение, а не верить полю: act/tests/test_profile.py сверяет каждое утверждение этого блока с настоящими исходниками уровня."
+    "disclaimer": "Профиль — ЗАЯВЛЕНИЕ уровня о себе, а не доказательство (SPEC-NPP-ACT.md §10.1). Потребитель обязан проверять поведение, а не верить полю: act/tests/test_profile.py сверяет каждое утверждение этого блока с настоящими исходниками уровня.",
+    "idempotency_honored": false,
+    "idempotency_evidence": "measured"
   },
   "capabilities": [
     {

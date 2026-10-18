@@ -36,7 +36,8 @@
         "code": "missing-order-get",
         "severity": "critical",
         "detail": "15/22: GET /api/orders/{token} не реализован вовсе",
-        "evidence": "в order-service объявлены только @app.get('/health') и @app.post('/api/orders')"
+        "evidence": "перемер 9aa23bf: GET существующего заказа → 404; классификатор отнёс order.get в missing_verbs по реальному номеру; код ветки: order-service содержит только POST /api/orders",
+        "measured": true
       },
       {
         "code": "blocking-broker-publish",
@@ -49,13 +50,22 @@
         "severity": "high",
         "detail": "остаток не сверяется",
         "evidence": "в create_order() 'SELECT name, price FROM products WHERE id=%s' без stock"
+      },
+      {
+        "code": "idempotency-declared-not-implemented",
+        "severity": "high",
+        "detail": "контракт не обещает идемпотентность, а протокол её требует для обязательств; повтор с тем же ключом не возвращает то же обязательство",
+        "evidence": "перемер 9aa23bf: два заказа с одним client_token получили разные order_number; order-service client_token не читает",
+        "measured": true
       }
     ],
     "audit": {
       "source": "аудит семи уровней daten2",
       "verified_against": "origin/claude/level7-enterprise-GBpVR:services/order-service/app.py"
     },
-    "disclaimer": "Профиль — ЗАЯВЛЕНИЕ уровня о себе, а не доказательство (SPEC-NPP-ACT.md §10.1). Потребитель обязан проверять поведение, а не верить полю: act/tests/test_profile.py сверяет каждое утверждение этого блока с настоящими исходниками уровня."
+    "disclaimer": "Профиль — ЗАЯВЛЕНИЕ уровня о себе, а не доказательство (SPEC-NPP-ACT.md §10.1). Потребитель обязан проверять поведение, а не верить полю: act/tests/test_profile.py сверяет каждое утверждение этого блока с настоящими исходниками уровня.",
+    "idempotency_honored": false,
+    "idempotency_evidence": "measured"
   },
   "capabilities": [
     {

@@ -41,7 +41,7 @@ python3 -m act.tests.test_act       # 41 проверка ядра
 ```
 
 Подробности — в [`act/README.md`](act/README.md) и
-[`act/SPEC-NPP-ACT.md`](act/SPEC-NPP-ACT.md). Всего **556 проверок**,
+[`act/SPEC-NPP-ACT.md`](act/SPEC-NPP-ACT.md). Всего **1452 проверки в 19 наборах**,
 зависимостей нет, API-ключи не нужны.
 
 > Уровень 5 лежит и в корне (как цель деплоя), и в `levels/level5/` — чтобы все семь

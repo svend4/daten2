@@ -41,13 +41,22 @@
         "severity": "high",
         "detail": "остаток не сверяется с запрошенным количеством",
         "evidence": "в POST /api/orders выбирается 'SELECT name, price FROM products' без stock"
+      },
+      {
+        "code": "idempotency-declared-not-implemented",
+        "severity": "high",
+        "detail": "контракт не обещает идемпотентность, а протокол её требует для обязательств; повтор с тем же ключом не возвращает то же обязательство",
+        "evidence": "перемер 9aa23bf: повтор создал второе обязательство; app.js берёт только name, phone, email, address, items",
+        "measured": true
       }
     ],
     "audit": {
       "source": "аудит семи уровней daten2",
       "verified_against": "origin/claude/level4-express-GBpVR:app.js"
     },
-    "disclaimer": "Профиль — ЗАЯВЛЕНИЕ уровня о себе, а не доказательство (SPEC-NPP-ACT.md §10.1). Потребитель обязан проверять поведение, а не верить полю: act/tests/test_profile.py сверяет каждое утверждение этого блока с настоящими исходниками уровня."
+    "disclaimer": "Профиль — ЗАЯВЛЕНИЕ уровня о себе, а не доказательство (SPEC-NPP-ACT.md §10.1). Потребитель обязан проверять поведение, а не верить полю: act/tests/test_profile.py сверяет каждое утверждение этого блока с настоящими исходниками уровня.",
+    "idempotency_honored": false,
+    "idempotency_evidence": "measured"
   },
   "capabilities": [
     {

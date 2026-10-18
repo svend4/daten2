@@ -41,13 +41,22 @@
         "severity": "high",
         "detail": "перепродажа не отвергается, остаток уходит в минус",
         "evidence": "'UPDATE products SET stock = stock - ?' без ограничения снизу: на аудируемой ветке зажима MAX(stock - ?, 0) нет"
+      },
+      {
+        "code": "idempotency-declared-not-implemented",
+        "severity": "high",
+        "detail": "контракт не обещает идемпотентность, а протокол её требует для обязательств; повтор с тем же ключом не возвращает то же обязательство",
+        "evidence": "перемер 9aa23bf: два запроса с одним client_token создали два заказа; код ветки client_token не читает (grep пуст)",
+        "measured": true
       }
     ],
     "audit": {
       "source": "аудит семи уровней daten2",
       "verified_against": "origin/claude/level2-flask-GBpVR:database.py"
     },
-    "disclaimer": "Профиль — ЗАЯВЛЕНИЕ уровня о себе, а не доказательство (SPEC-NPP-ACT.md §10.1). Потребитель обязан проверять поведение, а не верить полю: act/tests/test_profile.py сверяет каждое утверждение этого блока с настоящими исходниками уровня."
+    "disclaimer": "Профиль — ЗАЯВЛЕНИЕ уровня о себе, а не доказательство (SPEC-NPP-ACT.md §10.1). Потребитель обязан проверять поведение, а не верить полю: act/tests/test_profile.py сверяет каждое утверждение этого блока с настоящими исходниками уровня.",
+    "idempotency_honored": false,
+    "idempotency_evidence": "measured"
   },
   "capabilities": [
     {
