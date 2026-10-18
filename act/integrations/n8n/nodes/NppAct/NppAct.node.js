@@ -120,6 +120,28 @@ async function assertRuntime(ctx, gatewayUrl, itemIndex) {
 }
 
 /**
+ * Проверить ответ /act/perform и отдать его дальше только если он годен.
+ *
+ * Штатный ответ — 200 с полем decision, включая отказ губернатора (block/escalate):
+ * это решение, по нему workflow ветвится. Всё остальное — ошибка шлюза: 404 на
+ * неверном пути, 502 при недоступном сервисе, 5xx. Такой ответ обязан стать
+ * ошибкой узла. Иначе verdict становится «unknown», а узел молча выдаёт успех:
+ * workflow принимает отсутствие решения за решение.
+ */
+function gatewayAnswer(ctx, status, answer, url, itemIndex) {
+	if (status !== 200) {
+		const detail = answer && typeof answer === 'object' && answer.error
+			? answer.error
+			: JSON.stringify(answer);
+		throw fail(ctx, `рантайм NPP-Act ответил ${status} на ${url}: ${detail}`, itemIndex);
+	}
+	if (!answer || typeof answer !== 'object' || !answer.decision) {
+		throw fail(ctx, `рантайм NPP-Act ответил без решения губернатора (${url})`, itemIndex);
+	}
+	return answer;
+}
+
+/**
  * Прочитать параметр узла.
  *
  * У контекста исполнения и у контекста выпадающих списков разные подписи
@@ -421,13 +443,16 @@ class NppAct {
 				if (Object.keys(holdRaw).length) body.hold = holdRaw;
 
 				const url = gatewayUrl + PERFORM;
-				const post = (dry) =>
-					request(this, { method: 'POST', url, body: { ...body, dry_run: dry }, timeout }, i);
+				const post = async (dry) => {
+					const { status, body: answer } = await request(
+						this, { method: 'POST', url, body: { ...body, dry_run: dry }, timeout }, i);
+					return gatewayAnswer(this, status, answer, url, i);
+				};
 
 				// Сухой прогон: узел обязан только показать решение и ничего не исполнить.
 				// Поэтому здесь нет никакой ветки «а если admit, то давай сразу и сделаем».
 				if (dryRun) {
-					const { body: answer } = await post(true);
+					const answer = await post(true);
 					out.push({
 						json: shape(service, verb, answer, { dryRun: true, stoppedBy: null }),
 						pairedItem: { item: i },
@@ -436,7 +461,7 @@ class NppAct {
 				}
 
 				if (preflight) {
-					const { body: probe } = await post(true);
+					const probe = await post(true);
 					const verdict = probe && probe.decision ? probe.decision.verdict : 'unknown';
 					if (verdict !== 'admit') {
 						const json = shape(service, verb, probe, { dryRun: false, stoppedBy: 'preflight' });
@@ -448,7 +473,7 @@ class NppAct {
 					}
 				}
 
-				const { body: answer } = await post(false);
+				const answer = await post(false);
 				const json = shape(service, verb, answer, { dryRun: false, stoppedBy: null });
 				if (failOnBlock && json.verdict !== 'admit') {
 					throw fail(this, `губернатор отказал (${json.verdict}): ${json.reason}`, i);

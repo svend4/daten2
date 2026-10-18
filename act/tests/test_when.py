@@ -804,15 +804,28 @@ def test_bad_when(reg: Registry, tmp: Path) -> None:
     check("ScheduleGuard на негодном блоке бросает WhenError, а не молчит",
           guard_raised is not None, "предикат воздержался при испорченном объявлении")
 
-    act_raised = None
-    try:
-        anna.act(NORD, "booking.create", {**payload, "when": {"starts_at": "позже"}},
-                 key="k-bad", hold=hold)
-    except WhenError as e:
-        act_raised = e
-    check("действие через губернатора не состоялось (WhenError)", act_raised is not None)
-    check("решения губернатора по этой попытке в журнале нет — до него не дошло",
-          not booking_decisions(led), str([r.payload for r in booking_decisions(led)]))
+    # Этап 22: на уровне ГУБЕРНАТОРА негодный `when` — штатное решение `block`,
+    # а не исключение. Прежняя версия этого теста ожидала WhenError и тем самым
+    # фиксировала дефект: intent в цепи без decision. Здесь меняется ожидание,
+    # а не проверка: та же попытка по-прежнему не исполняется, но теперь отказ
+    # обязан быть записан. Исключение на уровне `commit_two_party` (выше и ниже)
+    # остаётся, потому что это ошибка программиста клиента, а не решение.
+    act_decision, act_result = anna.act(
+        NORD, "booking.create", {**payload, "when": {"starts_at": "позже"}},
+        key="k-bad", hold=hold)
+    check("губернатор отказал решением block, исключения не было",
+          act_decision.verdict == "block" and act_result is None,
+          f"verdict={act_decision.verdict}")
+    check("причина названа поле: starts_at",
+          "starts_at" in act_decision.reason, act_decision.reason)
+    bad_decisions = [r for r in booking_decisions(led)
+                     if r.payload.get("verdict") == "block"
+                     and "starts_at" in str(r.payload.get("reason", ""))]
+    check("отказ записан в журнал как decision (а не только intent)",
+          len(bad_decisions) == 1, str([r.payload for r in booking_decisions(led)]))
+    check("исполнения по попытке k-bad нет: до сервиса не дошло",
+          not any(r.payload.get("idempotency_key") == "k-bad"
+                  for r in led.by_kind("execution")))
 
     # Двойное объявление с разными значениями — тоже отказ, а не тихий выбор.
     double = None

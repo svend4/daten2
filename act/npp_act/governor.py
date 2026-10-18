@@ -87,6 +87,31 @@ class Governor:
         """Зафиксировать полученное подтверждение (от человека или второй стороны)."""
         self.confirmations.add(key)
 
+    @staticmethod
+    def _when_defect(service: str, verb_id: str, raw: Any) -> str | None:
+        """Причина, почему объявленный `when` негоден, или None, если он годен.
+
+        Валидатор берётся тот же, что у карты обязательств и предиката H8
+        (`calendar.normalize_when`): два валидатора однажды разойдутся, и гейт
+        пропустит то, что карта не сможет нарисовать, или наоборот.
+
+        Импорт ленивый, а не в шапке: шапка модуля сознательно не тянет карту
+        времени при каждом импорте гейта. Вызов идёт только тогда, когда `when`
+        объявлен.
+
+        `ValueError` ловится наряду с `WhenError`: `WhenError` — подкласс
+        `ValueError`, но `normalize_when` на `duration_min: NaN` (его принимает
+        `json.loads` шлюза) может бросить голый `ValueError` из `int(nan)`.
+        Такое значение должно стать отказом, а не ответом 500.
+        """
+        from .calendar import normalize_when
+
+        try:
+            normalize_when(raw, where=f"{service}:{verb_id} when")
+        except (ValueError, OverflowError, TypeError) as e:
+            return f"негодное время обязательства (§6.1): {e}"
+        return None
+
     def _estimate(self, cap: Capability, payload: dict[str, Any]) -> float | None:
         """Во сколько обойдётся глагол: объявленная цена либо потолок из входа."""
         declared = cap.declared_money()
@@ -105,6 +130,18 @@ class Governor:
         idempotency_key: str | None = None,
         hold: dict[str, Any] | None = None,
     ) -> Decision:
+        """Решение о допуске. Негодные ДАННЫЕ намерения — это решение `block`.
+
+        Негодное объявление времени (§6.1) возвращается как `block` с причиной,
+        называющей поле, а не исключением: отказ должен попасть в журнал, и
+        исполнитель записывает его как `decision`. Исключение здесь означало бы
+        intent без решения в цепи.
+
+        Ошибкой программиста считается другое: `Agent.commit_two_party` бросает
+        `WhenError` ДО HTTP и до согласий, когда клиент сам передал негодный блок.
+        Такой вызов не был намерением, которое стоит журналировать как отказ,
+        и его видит сам клиент, а не аудит.
+        """
         payload = payload or {}
         checks: list[str] = []
 
@@ -125,6 +162,20 @@ class Governor:
         if cap is None:
             return block(f"глагол '{verb_id}' не объявлен в манифесте сервиса '{service}'")
         checks.append("H2 глагол объявлен")
+
+        # --- W0: объявленное время годно (§6.1) ---
+        # Негодный `when` — штатный отказ губернатора, а не исключение. Раньше
+        # WhenError вылетал отсюда наружу: исполнитель уже записал intent, decision
+        # не записывался, и в хэш-цепи оставалось намерение без решения. Отказ,
+        # которого нет в журнале, для аудита хуже открытого отказа.
+        # Проверка стоит здесь, до H8: предикат расписания уже должен получать
+        # годное время. Проверяем только объявленный блок: отсутствие `when`
+        # допустимо (§6.1 — SHOULD). Для валидного блока журнал не меняется:
+        # пройденная проверка не добавляет метку в `checks`.
+        if payload.get("when") is not None:
+            defect = self._when_defect(service, verb_id, payload["when"])
+            if defect is not None:
+                return block(defect)
 
         # Чтение не меняет мир — проходит без дальнейших проверок.
         if cap.effect == "read":

@@ -14,7 +14,8 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any
 
-from .governor import Decision, Governor
+from .calendar import WhenError
+from .governor import BLOCK, Decision, Governor
 from .ledger import Ledger
 from .manifest import Capability, Manifest
 
@@ -113,7 +114,17 @@ class Executor:
             "payload": _redact(payload), "idempotency_key": idempotency_key,
         })
 
-        decision = self.governor.evaluate(service, verb_id, payload, idempotency_key, hold)
+        try:
+            decision = self.governor.evaluate(service, verb_id, payload, idempotency_key, hold)
+        except WhenError as e:
+            # Страховка границы. Губернатор сам отвергает негодный `when` (W0), но
+            # предикат H8 или чужой schedule_guard может бросить WhenError. Если
+            # исключение долетит сюда, цепь останется с intent без decision — ровно
+            # тот дефект, ради которого W0 существует. Поэтому отказ становится
+            # решением `block` и записывается в журнал, а не уходит наружу.
+            decision = Decision(
+                BLOCK, f"негодное время обязательства (§6.1): {e}",
+                verb_id, service, None, [])
 
         self.ledger.append("decision", {
             "service": service, "verb": verb_id,

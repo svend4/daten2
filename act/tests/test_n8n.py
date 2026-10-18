@@ -38,9 +38,36 @@ NODE_JS = N8N / "nodes" / "NppAct" / "NppAct.node.js"
 NODE_JSON = N8N / "nodes" / "NppAct" / "NppAct.node.json"
 PACKAGE = N8N / "package.json"
 
-GW_PORT = 8203
-VENUE_PORT = 8213
-GUILD_PORT = 8223
+def _free_port(start: int) -> int:
+    """Свободный порт: молчит по HTTP И свободен для bind (двойная проверка).
+
+    Фиксированные номера здесь уже однажды стали причиной молчаливого измерения
+    чужого процесса в другом наборе; выбираем порт при загрузке модуля.
+    """
+    import socket
+    for port in range(start, start + 400):
+        if _answers(f"http://127.0.0.1:{port}/api/health"):
+            continue
+        with socket.socket() as probe:
+            try:
+                probe.bind(("127.0.0.1", port))
+            except OSError:
+                continue
+        return port
+    raise RuntimeError("свободный порт не найден")
+
+
+def _answers(url: str) -> bool:
+    try:
+        with urllib.request.urlopen(url, timeout=0.5):
+            return True
+    except Exception:
+        return False
+
+
+GW_PORT = _free_port(8203)
+VENUE_PORT = _free_port(GW_PORT + 1)
+GUILD_PORT = _free_port(VENUE_PORT + 1)
 GW = f"http://127.0.0.1:{GW_PORT}"
 VENUE = f"http://127.0.0.1:{VENUE_PORT}"
 GUILD = f"http://127.0.0.1:{GUILD_PORT}"

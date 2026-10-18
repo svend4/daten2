@@ -643,8 +643,10 @@ def test_passport(naut: Path, M: types.ModuleType) -> None:
     check("health_check найдёт в паспорте Q6", "Q6" in text or "q6" in text)
     check("health_check найдёт в паспорте раздел мостов",
           "Мосты" in text or "Bridges" in text)
-    check("паспорт честно называет дефект сервиса заведения (404 на well-known)",
-          "404" in text)
+    # Дефект well-known заведения исправлен (путь к манифесту считался на каталог
+    # выше). Паспорт обязан больше не объявлять его открытым.
+    check("паспорт не объявляет исправленный дефект well-known открытым",
+          "**404**" not in text and "считается на один каталог выше" not in text)
 
 
 # ---------------------------------------------------------------------------
@@ -685,24 +687,27 @@ def test_live(M: types.ModuleType) -> None:
           str(svc.metadata["manifest_url"]).endswith("/.well-known/npp-act.json"),
           str(svc.metadata["manifest_url"]))
 
-    # настоящий 404: сервис заведения считает путь к манифесту на каталог выше
-    with urllib.request.urlopen(f"{VENUE}/api/health", timeout=3) as r:
-        venue_alive = r.status == 200
-    code = 0
-    try:
-        with urllib.request.urlopen(f"{VENUE}/.well-known/npp-act.json", timeout=3) as r:
-            code = r.status
-    except urllib.error.HTTPError as exc:
-        code = exc.code
-    check("сервис заведения жив, но манифест по well-known не отдаёт (настоящий дефект)",
-          venue_alive and code == 404, f"health={venue_alive}, well-known={code}")
+    # Исправленный дефект: манифест заведения отдаётся по well-known (было 404).
+    with urllib.request.urlopen(f"{VENUE}/.well-known/npp-act.json", timeout=3) as r:
+        code = r.status
+    check("манифест заведения отдаётся по well-known (исправлено: было 404)",
+          code == 200, f"well-known={code}")
 
-    deg = M.NppActAdapter([VENUE, str(MANIFESTS / "venue.act.json")], live=True, timeout=3.0)
+    # Деградация проверяется на НАСТОЯЩЕМ 404 живого сервиса: адрес несуществующего
+    # манифеста, а не подделанный ответ. Адаптер обязан упасть к локальному файлу.
+    deg = M.NppActAdapter([f"{VENUE}/.well-known/no-such-manifest.json",
+                           str(MANIFESTS / "venue.act.json")], live=True, timeout=3.0)
     dd = deg.describe()
-    check("на 404 адаптер не падает, а падает к локальному файлу",
+    check("на настоящий 404 адаптер не падает, а падает к локальному файлу",
           dd["total_services"] == 1 and dd["sources"]["files"] == 1
           and any("404" in f or "HTTPError" in f for f in dd["sources"]["failed"]),
           str(dd["sources"]))
+
+    live = M.NppActAdapter([VENUE], live=True, timeout=3.0)
+    ld = live.describe()
+    check("живой адрес заведения теперь читается по сети, без падения к файлу",
+          ld["sources"]["http"] == 1 and ld["sources"]["fallback"] is False,
+          str(ld["sources"]))
 
     both = M.NppActAdapter([str(MANIFESTS / "freelance.act.json"), GUILD], live=True, timeout=3.0)
     kinds = {e.metadata.get("source_kind") for e in both.entries() if e.metadata.get("verb")}
