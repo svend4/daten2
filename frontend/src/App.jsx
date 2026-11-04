@@ -1,7 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 
-const API = 'http://127.0.0.1:5001';
+const API = import.meta.env.VITE_API_URL || '';
+
+// axios с автоматическим Bearer-токеном
+const authHeader = () => {
+  const t = localStorage.getItem('token');
+  return t ? { Authorization: `Bearer ${t}` } : {};
+};
 
 export default function App() {
   const [products, setProducts] = useState([]);
@@ -10,9 +16,48 @@ export default function App() {
   const [phone, setPhone] = useState('');
   const total = useMemo(() => cart.reduce((s, it) => s + it.price * it.qty, 0), [cart]);
 
+  // auth
+  const [user, setUser] = useState(null);
+  const [authMode, setAuthMode] = useState('login'); // login | register
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [authName, setAuthName] = useState('');
+  const [myOrders, setMyOrders] = useState([]);
+
   useEffect(() => {
     axios.get(`${API}/api/products`).then(r => setProducts(r.data));
+    if (localStorage.getItem('token')) {
+      axios.get(`${API}/api/auth/me`, { headers: authHeader() })
+        .then(r => { setUser(r.data); loadMyOrders(); })
+        .catch(() => localStorage.removeItem('token'));
+    }
   }, []);
+
+  const loadMyOrders = () => {
+    axios.get(`${API}/api/auth/orders`, { headers: authHeader() })
+      .then(r => setMyOrders(r.data)).catch(() => setMyOrders([]));
+  };
+
+  const submitAuth = async () => {
+    try {
+      const url = authMode === 'login' ? '/api/auth/login' : '/api/auth/register';
+      const body = authMode === 'login'
+        ? { email, password }
+        : { email, password, name: authName };
+      const r = await axios.post(`${API}${url}`, body);
+      localStorage.setItem('token', r.data.token);
+      setUser(r.data.user);
+      setEmail(''); setPassword(''); setAuthName('');
+      loadMyOrders();
+    } catch (e) {
+      alert(e.response?.data?.error || 'Ошибка авторизации');
+    }
+  };
+
+  const logout = () => {
+    localStorage.removeItem('token');
+    setUser(null); setMyOrders([]);
+  };
 
   const add = (p) => {
     setCart(prev => {
@@ -27,19 +72,42 @@ export default function App() {
   };
 
   const order = async () => {
-    if (!name || cart.length === 0) return;
-    const payload = { name, phone, items: cart.map(x => ({ product_id: x.product_id, qty: x.qty })) };
-    const res = await axios.post(`${API}/api/orders`, payload);
-    alert(`✅ Заказ принят! № ${res.data.order_id}`);
-    setCart([]);
-    setName('');
-    setPhone('');
+    const who = user ? user.name || user.email : name;
+    if (!who || cart.length === 0) return;
+    const payload = { name: who, phone, items: cart.map(x => ({ product_id: x.product_id, quantity: x.qty })) };
+    const res = await axios.post(`${API}/api/orders`, payload, { headers: authHeader() });
+    alert(`✅ Заказ принят! Номер для отслеживания: ${res.data.order_number}`);
+    setCart([]); setName(''); setPhone('');
+    if (user) loadMyOrders();
   };
 
   return (
     <div className="wrap">
       <h1>🌹 Магазин цветов</h1>
       <p className="muted">Уровень 5: React (Vite) + Flask API + SQLite</p>
+
+      {/* --- авторизация --- */}
+      <div className="cart" style={{ marginBottom: 16 }}>
+        {user ? (
+          <div className="row">
+            <div className="grow">👤 Вход выполнен: <b>{user.name || user.email}</b></div>
+            <button onClick={logout}>Выйти</button>
+          </div>
+        ) : (
+          <>
+            <div className="row">
+              <button onClick={() => setAuthMode('login')} disabled={authMode === 'login'}>Вход</button>
+              <button onClick={() => setAuthMode('register')} disabled={authMode === 'register'}>Регистрация</button>
+            </div>
+            {authMode === 'register' && (
+              <input value={authName} onChange={e => setAuthName(e.target.value)} placeholder="Имя" />
+            )}
+            <input value={email} onChange={e => setEmail(e.target.value)} placeholder="Email" />
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Пароль (мин. 6)" />
+            <button onClick={submitAuth}>{authMode === 'login' ? 'Войти' : 'Зарегистрироваться'}</button>
+          </>
+        )}
+      </div>
 
       <div className="grid">
         {products.map(p => (
@@ -67,13 +135,27 @@ export default function App() {
               <div className="grow">Итого</div>
               <div>{total.toFixed(2)} €</div>
             </div>
-
-            <input value={name} onChange={e => setName(e.target.value)} placeholder="Ваше имя" />
+            {!user && (
+              <input value={name} onChange={e => setName(e.target.value)} placeholder="Ваше имя" />
+            )}
             <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="Телефон (необязательно)" />
-            <button onClick={order} disabled={!name || cart.length === 0}>Оформить заказ</button>
+            <button onClick={order} disabled={(!user && !name) || cart.length === 0}>Оформить заказ</button>
           </>
         )}
       </div>
+
+      {/* --- история заказов (только для авторизованных) --- */}
+      {user && (
+        <div className="cart">
+          <h2>📦 Мои заказы</h2>
+          {myOrders.length === 0 ? <p className="muted">Пока нет заказов.</p> : myOrders.map(o => (
+            <div className="row" key={o.order_number}>
+              <div className="grow">№ {o.order_number.slice(0, 10)}… · {o.status} · {o.payment_status}</div>
+              <div>{Number(o.total_amount).toFixed(2)} €</div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

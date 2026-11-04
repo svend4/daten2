@@ -1,0 +1,123 @@
+openapi: 3.0.3
+info:
+  title: Flower Shop API — единый канонический контракт
+  version: "1.0.0"
+  description: >
+    Один и тот же контракт реализуют все 7 уровней. Благодаря этому любой
+    фронтенд может говорить с любым бэкендом, а gateway — маршрутизировать
+    запрос на любой уровень (композиция «уровень как сервис»).
+servers:
+  - url: /
+paths:
+  /api/health:
+    get:
+      summary: Живость сервиса и идентификация уровня
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  level: { type: integer, description: "номер уровня 1..7" }
+                  stack: { type: string }
+  /api/products:
+    get:
+      summary: Каталог активных товаров (рекомендуемые вперёд)
+      responses:
+        "200":
+          description: массив товаров
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Product" }
+  /api/orders:
+    post:
+      summary: Создать заказ
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateOrder" }
+      responses:
+        "201":
+          description: заказ создан
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  order_number: { type: string, description: "непубличный токен" }
+                  total: { type: number }
+        "400": { description: неверный ввод }
+  /api/orders/{order_number}:
+    get:
+      summary: Заказ по непубличному номеру (защита от перебора id)
+      parameters:
+        - name: order_number
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: заказ
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrderDetail" }
+        "404": { description: не найден }
+components:
+  schemas:
+    Product:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        slug: { type: string }
+        description: { type: string, nullable: true }
+        price: { type: number }
+        currency: { type: string }
+        image: { type: string, nullable: true }
+        sku: { type: string, nullable: true }
+        stock: { type: integer }
+        is_featured: { type: boolean }
+        category_name: { type: string, nullable: true }
+    CreateOrder:
+      type: object
+      required: [name, items]
+      properties:
+        name: { type: string }
+        phone: { type: string }
+        email: { type: string }
+        address: { type: string }
+        items:
+          type: array
+          items:
+            type: object
+            required: [product_id, quantity]
+            properties:
+              product_id: { type: integer }
+              quantity: { type: integer, minimum: 1 }
+    OrderDetail:
+      type: object
+      properties:
+        order:
+          type: object
+          properties:
+            order_number: { type: string }
+            status: { type: string }
+            payment_status: { type: string }
+            total_amount: { type: number }
+            customer_name: { type: string }
+            phone: { type: string }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              product_name: { type: string }
+              quantity: { type: integer }
+              unit_price: { type: number }
+              line_total: { type: number }

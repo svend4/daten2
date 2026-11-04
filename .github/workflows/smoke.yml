@@ -1,0 +1,59 @@
+name: smoke (L5 · React + Flask)
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install backend deps
+        run: pip install -r backend/requirements.txt
+      - name: Boot API and check endpoints (rich schema)
+        working-directory: backend
+        run: |
+          python - <<'PY'
+          import api  # инициализирует БД из канонической схемы при импорте
+          api.app.config['TESTING'] = True
+          c = api.app.test_client()
+          assert c.get('/api/health').get_json()['level']==5, 'health'
+          r = c.get('/api/products')
+          assert r.status_code == 200 and isinstance(r.get_json(), list), 'каталог API'
+          r = c.post('/api/orders', json={'name': 'CI', 'phone': '0', 'email': 'a@b.c',
+                                          'address': 'x', 'items': [{'product_id': 1, 'quantity': 1}]})
+          assert r.status_code == 201, 'создание заказа'
+          token = r.get_json()['order_number']
+          assert len(token) == 32, 'токен заказа'
+          r2 = c.get(f'/api/orders/{token}')
+          assert r2.status_code == 200 and r2.get_json()['order']['payment_status'] == 'pending', 'заказ по токену'
+          # авторизация (пила коммерции L5)
+          reg = c.post('/api/auth/register', json={'email':'u@ci.com','password':'secret123','name':'CI'})
+          assert reg.status_code == 201, 'register'
+          tk = reg.get_json()['token']
+          hdr = {'Authorization': f'Bearer {tk}'}
+          assert c.get('/api/auth/me', headers=hdr).status_code == 200, 'me'
+          assert c.get('/api/auth/me').status_code == 401, 'me без токена = 401'
+          c.post('/api/orders', headers=hdr, json={'name':'CI','items':[{'product_id':1,'quantity':1}]})
+          assert len(c.get('/api/auth/orders', headers=hdr).get_json()) == 1, 'история заказов'
+          assert c.post('/api/auth/login', json={'email':'u@ci.com','password':'wrong'}).status_code == 401, 'неверный пароль'
+          print('API + богатая схема + авторизация OK ✓')
+          PY
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Build SPA
+        working-directory: frontend
+        run: |
+          npm install
+          npm run build
+          test -d dist && echo "Сборка фронта OK ✓"
