@@ -62,6 +62,8 @@ MCP-адаптер. `docker-compose.yml` сводит всё в один жив�
 Каждая ветка — самодостаточный контекст сборки (исходники + `Dockerfile` +
 `openapi.yaml` + каноническая схема), готовый к деплою.
 
+> Примечание по ветке `main`: до консолидации в корне `main` располагалась начальная реализация L5 (`backend/api.py`, `backend/flowers.db`, `backend/requirements.txt` и `frontend/` на Vite, порт `127.0.0.1:5173`); в `claude/main-candidate-GBpVR` исходники L1–L7 собраны в `flower_shop_levels/` и `stack/`.
+
 ---
 
 ## 🤖 Слой над уровнями
@@ -321,3 +323,7 @@ offline и маршрутизирует в остальные — это и де
 | `stack/level7/db-init.sql` | Каноническая схема + сид для PostgreSQL L7 |
 | `flower_shop_levels/` | Исходный код семи уровней (source-of-record) |
 | `.github/workflows/compose-validate.yml` | CI: валидация compose на каждом пуше |
+
+## Лицензия
+
+Проект распространяется под лицензией **GNU Affero General Public License v3.0 (AGPL-3.0)** — см. [`LICENSE`](LICENSE).
